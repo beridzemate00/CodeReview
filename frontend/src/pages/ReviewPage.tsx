@@ -12,12 +12,14 @@ export function ReviewPage() {
         setIsReviewing(true);
         setReviews([]); // clear previous
         try {
-            const response = await fetch('http://localhost:3000/api/review', {
+            const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+            const response = await fetch(`${apiUrl}/api/review`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
                 },
-                body: JSON.stringify({ code, language: 'typescript' }),
+                body: JSON.stringify({ code, language: 'typescript', projectId: 'default' }),
             });
             const data = await response.json();
             setReviews(data.reviews || []);

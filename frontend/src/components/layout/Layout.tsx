@@ -1,18 +1,28 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Sidebar } from './Sidebar';
-import { Bell, Search, User } from 'lucide-react';
+import { Bell, Search, User, Menu } from 'lucide-react';
 
-export function Header() {
+interface HeaderProps {
+    onMenuClick: () => void;
+}
+
+export function Header({ onMenuClick }: HeaderProps) {
     return (
-        <header className="h-16 bg-[#0a0a0a]/80 backdrop-blur-xl border-b border-neutral-800 flex items-center justify-between px-8 sticky top-0 z-30 ml-64">
+        <header className="h-16 bg-[#0a0a0a]/80 backdrop-blur-xl border-b border-neutral-800 flex items-center justify-between px-4 md:px-8 sticky top-0 z-30 md:ml-64">
             <div className="flex items-center text-sm text-neutral-400">
-                <span className="hover:text-white cursor-pointer transition-colors">Workspace</span>
-                <span className="mx-2">/</span>
+                <button
+                    className="md:hidden mr-4 text-neutral-400 hover:text-white"
+                    onClick={onMenuClick}
+                >
+                    <Menu size={24} />
+                </button>
+                <span className="hidden md:inline hover:text-white cursor-pointer transition-colors">Workspace</span>
+                <span className="hidden md:inline mx-2">/</span>
                 <span className="text-white font-medium">New Review</span>
             </div>
 
-            <div className="flex items-center space-x-6">
-                <div className="relative group">
+            <div className="flex items-center space-x-4 md:space-x-6">
+                <div className="relative group hidden md:block">
                     <Search size={18} className="text-neutral-500 absolute left-3 top-1/2 -translate-y-1/2 group-hover:text-neutral-300 transition-colors" />
                     <input
                         type="text"
@@ -35,13 +45,16 @@ export function Header() {
 }
 
 export function Layout({ children }: { children: React.ReactNode }) {
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
     return (
         <div className="min-h-screen bg-[#0a0a0a] text-neutral-200 font-sans">
-            <Sidebar />
-            <Header />
-            <main className="ml-64 p-8 min-h-[calc(100vh-64px)]">
+            <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
+            <Header onMenuClick={() => setIsSidebarOpen(true)} />
+            <main className="md:ml-64 p-4 md:p-8 min-h-[calc(100vh-64px)]">
                 {children}
             </main>
         </div>
     );
 }
+
