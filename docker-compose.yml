@@ -7,7 +7,6 @@ services:
       - "3000:3000"
     volumes:
       - ./backend/prisma:/app/prisma
-      - ./backend/dev.db:/app/dev.db
     environment:
       - DATABASE_URL=file:./dev.db
       - JWT_SECRET=super-secret-key-change-this
