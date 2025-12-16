@@ -1,15 +1,17 @@
 import { Request, Response } from 'express';
 import prisma from '../prisma/client';
 import { StaticAnalyzer, AnalysisResult } from '../services/analyzer';
+import { MLAnalyzer } from '../services/mlAnalyzer';
 
-const analyzer = new StaticAnalyzer();
+const staticAnalyzer = new StaticAnalyzer();
+const mlAnalyzer = new MLAnalyzer();
 
 interface AuthRequest extends Request {
     user?: { userId: string };
 }
 
 export const createReview = async (req: AuthRequest, res: Response) => {
-    const { code, language, projectId, fileName } = req.body;
+    const { code, language, projectId, fileName, enableML } = req.body;
     const userId = req.user?.userId;
 
     if (!code) {
@@ -17,23 +19,53 @@ export const createReview = async (req: AuthRequest, res: Response) => {
     }
 
     try {
-        const result: AnalysisResult = analyzer.analyze(code, language || 'typescript');
+        // Static analysis
+        const staticResult: AnalysisResult = staticAnalyzer.analyze(code, language || 'typescript');
+
+        // ML analysis (optional but enabled by default)
+        let mlResult = null;
+        if (enableML !== false) {
+            mlResult = mlAnalyzer.analyze(code, language || 'typescript');
+        }
+
+        // Combine results
+        const allReviews = [
+            ...staticResult.reviews,
+            ...(mlResult?.suggestions || []),
+        ];
+
+        // Calculate combined stats
+        const stats = {
+            totalIssues: allReviews.length,
+            highSeverity: allReviews.filter(r => r.severity === 'high').length,
+            mediumSeverity: allReviews.filter(r => r.severity === 'medium').length,
+            lowSeverity: allReviews.filter(r => r.severity === 'low').length,
+            qualityScore: mlResult?.overallScore || staticResult.stats.qualityScore,
+            complexity: mlResult?.codeMetrics?.nestingDepth || staticResult.stats.complexity,
+            linesOfCode: staticResult.stats.linesOfCode,
+            // ML-specific scores
+            readabilityScore: mlResult?.readabilityScore || 0,
+            maintainabilityScore: mlResult?.maintainabilityScore || 0,
+            securityScore: mlResult?.securityScore || 0,
+            performanceScore: mlResult?.performanceScore || 0,
+            predictedBugRisk: mlResult?.predictedBugRisk || 0,
+        };
 
         // Save to DB if user is authenticated
         if (userId) {
             await prisma.review.create({
                 data: {
-                    content: JSON.stringify(result.reviews),
-                    codeSnippet: code.substring(0, 500), // Store first 500 chars
+                    content: JSON.stringify(allReviews),
+                    codeSnippet: code.substring(0, 500),
                     language: language || 'typescript',
                     fileName: fileName || 'untitled',
-                    linesOfCode: result.stats.linesOfCode,
-                    issueCount: result.stats.totalIssues,
-                    highSeverity: result.stats.highSeverity,
-                    mediumSeverity: result.stats.mediumSeverity,
-                    lowSeverity: result.stats.lowSeverity,
-                    qualityScore: result.stats.qualityScore,
-                    complexity: result.stats.complexity,
+                    linesOfCode: stats.linesOfCode,
+                    issueCount: stats.totalIssues,
+                    highSeverity: stats.highSeverity,
+                    mediumSeverity: stats.mediumSeverity,
+                    lowSeverity: stats.lowSeverity,
+                    qualityScore: stats.qualityScore,
+                    complexity: stats.complexity,
                     projectId: projectId || undefined,
                     userId: userId,
                 }
@@ -41,8 +73,10 @@ export const createReview = async (req: AuthRequest, res: Response) => {
         }
 
         res.json({
-            reviews: result.reviews,
-            stats: result.stats
+            reviews: allReviews,
+            stats,
+            mlMetrics: mlResult?.codeMetrics || null,
+            patterns: mlResult?.patterns || [],
         });
     } catch (error) {
         console.error('Review failed:', error);
@@ -60,10 +94,9 @@ export const getHistory = async (req: AuthRequest, res: Response) => {
         const reviews = await prisma.review.findMany({
             where: { userId },
             orderBy: { createdAt: 'desc' },
-            take: 50, // Limit to last 50 reviews
+            take: 50,
         });
 
-        // Parse content JSON for each review
         const parsedReviews = reviews.map((review: any) => ({
             ...review,
             content: JSON.parse(review.content || '[]'),
@@ -97,7 +130,6 @@ export const getStats = async (req: AuthRequest, res: Response) => {
             },
         });
 
-        // Calculate aggregate stats
         const totalReviews = reviews.length;
         const totalIssues = reviews.reduce((sum: number, r: any) => sum + r.issueCount, 0);
         const totalHigh = reviews.reduce((sum: number, r: any) => sum + r.highSeverity, 0);
@@ -108,13 +140,11 @@ export const getStats = async (req: AuthRequest, res: Response) => {
             ? reviews.reduce((sum: number, r: any) => sum + r.qualityScore, 0) / totalReviews
             : 0;
 
-        // Language breakdown
         const languageBreakdown: Record<string, number> = {};
         reviews.forEach((r: any) => {
             languageBreakdown[r.language] = (languageBreakdown[r.language] || 0) + 1;
         });
 
-        // Trend data (last 7 days)
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
         const recentReviews = reviews.filter((r: any) => new Date(r.createdAt) >= sevenDaysAgo);
