@@ -403,8 +403,8 @@ export class MLAnalyzer {
 
         // Check for performance anti-patterns
         const perfChecks = [
-            { pattern: /for.*for/gs, penalty: 10, name: 'nested loops' },
-            { pattern: /\.forEach.*\.forEach/gs, penalty: 10, name: 'nested iterations' },
+            { pattern: /for[\s\S]*for/g, penalty: 10, name: 'nested loops' },
+            { pattern: /\.forEach[\s\S]*\.forEach/g, penalty: 10, name: 'nested iterations' },
             { pattern: /new RegExp\(/g, penalty: 5, name: 'regex in loop' },
             { pattern: /JSON\.parse.*JSON\.stringify/g, penalty: 5, name: 'inefficient cloning' },
         ];
