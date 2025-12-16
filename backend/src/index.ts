@@ -5,6 +5,7 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import authRoutes from './routes/authRoutes';
 import reviewRoutes from './routes/reviewRoutes';
+import userRoutes from './routes/userRoutes';
 
 dotenv.config();
 
@@ -101,6 +102,7 @@ app.get('/health', (req: Request, res: Response) => {
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/review', reviewRoutes);
+app.use('/api/user', userRoutes);
 
 // Root endpoint
 app.get('/', (req: Request, res: Response) => {
