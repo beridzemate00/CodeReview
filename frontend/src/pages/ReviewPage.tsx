@@ -65,6 +65,8 @@ console.log("Debug:", password);
                     code,
                     language,
                     enableML: settings.enableAI,
+                    enableAI: settings.enableAI && !!settings.apiKey,
+                    apiKey: settings.apiKey || undefined,
                     fileName: 'review.ts'
                 }),
             });

@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import prisma from '../prisma/client';
 import { StaticAnalyzer, AnalysisResult } from '../services/analyzer';
 import { MLAnalyzer } from '../services/mlAnalyzer';
+import { getGeminiAnalyzer } from '../services/geminiAnalyzer';
 
 const staticAnalyzer = new StaticAnalyzer();
 const mlAnalyzer = new MLAnalyzer();
@@ -11,7 +12,7 @@ interface AuthRequest extends Request {
 }
 
 export const createReview = async (req: AuthRequest, res: Response) => {
-    const { code, language, projectId, fileName, enableML } = req.body;
+    const { code, language, projectId, fileName, enableML, enableAI, apiKey } = req.body;
     const userId = req.user?.userId;
 
     if (!code) {
@@ -19,27 +20,54 @@ export const createReview = async (req: AuthRequest, res: Response) => {
     }
 
     try {
-        // Static analysis
+        // Static analysis (always runs)
         const staticResult: AnalysisResult = staticAnalyzer.analyze(code, language || 'typescript');
 
-        // ML analysis (optional but enabled by default)
+        // ML analysis (optional)
         let mlResult = null;
         if (enableML !== false) {
             mlResult = mlAnalyzer.analyze(code, language || 'typescript');
         }
 
-        // Combine results
+        // Gemini AI analysis (optional - requires API key)
+        let geminiResult = null;
+        const geminiAnalyzer = getGeminiAnalyzer();
+
+        // Use provided API key or environment variable
+        if (apiKey) {
+            geminiAnalyzer.setApiKey(apiKey);
+        }
+
+        if (enableAI !== false && geminiAnalyzer.isConfigured()) {
+            try {
+                geminiResult = await geminiAnalyzer.analyze(code, language || 'typescript');
+            } catch (aiError) {
+                console.error('Gemini AI analysis failed:', aiError);
+                // Continue without AI results
+            }
+        }
+
+        // Combine all results
         const allReviews = [
             ...staticResult.reviews,
             ...(mlResult?.suggestions || []),
+            ...(geminiResult?.reviews || []),
         ];
+
+        // Remove duplicates by message similarity
+        const uniqueReviews = allReviews.filter((review, index, self) =>
+            index === self.findIndex(r =>
+                r.message.replace('[AI]', '').replace('[ML]', '').trim().toLowerCase() ===
+                review.message.replace('[AI]', '').replace('[ML]', '').trim().toLowerCase()
+            )
+        );
 
         // Calculate combined stats
         const stats = {
-            totalIssues: allReviews.length,
-            highSeverity: allReviews.filter(r => r.severity === 'high').length,
-            mediumSeverity: allReviews.filter(r => r.severity === 'medium').length,
-            lowSeverity: allReviews.filter(r => r.severity === 'low').length,
+            totalIssues: uniqueReviews.length,
+            highSeverity: uniqueReviews.filter(r => r.severity === 'high').length,
+            mediumSeverity: uniqueReviews.filter(r => r.severity === 'medium').length,
+            lowSeverity: uniqueReviews.filter(r => r.severity === 'low').length,
             qualityScore: mlResult?.overallScore || staticResult.stats.qualityScore,
             complexity: mlResult?.codeMetrics?.nestingDepth || staticResult.stats.complexity,
             linesOfCode: staticResult.stats.linesOfCode,
@@ -55,7 +83,7 @@ export const createReview = async (req: AuthRequest, res: Response) => {
         if (userId) {
             await prisma.review.create({
                 data: {
-                    content: JSON.stringify(allReviews),
+                    content: JSON.stringify(uniqueReviews),
                     codeSnippet: code.substring(0, 500),
                     language: language || 'typescript',
                     fileName: fileName || 'untitled',
@@ -73,10 +101,14 @@ export const createReview = async (req: AuthRequest, res: Response) => {
         }
 
         res.json({
-            reviews: allReviews,
+            reviews: uniqueReviews,
             stats,
             mlMetrics: mlResult?.codeMetrics || null,
             patterns: mlResult?.patterns || [],
+            aiSummary: geminiResult?.summary || null,
+            aiAssessment: geminiResult?.overallAssessment || null,
+            suggestedImprovements: geminiResult?.suggestedImprovements || [],
+            aiEnabled: geminiAnalyzer.isConfigured(),
         });
     } catch (error) {
         console.error('Review failed:', error);
