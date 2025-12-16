@@ -15,6 +15,7 @@ model User {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   projects  Project[]
+  reviews   Review[]
 }
 
 model Project {
@@ -28,9 +29,21 @@ model Project {
 }
 
 model Review {
-  id        String   @id @default(uuid())
-  content   String   // JSON string of the review comments
-  projectId String?
-  project   Project? @relation(fields: [projectId], references: [id])
-  createdAt DateTime @default(now())
+  id            String   @id @default(uuid())
+  content       String   // JSON string of the review comments
+  codeSnippet   String?  // Stored code snippet (truncated for display)
+  language      String   @default("typescript")
+  fileName      String   @default("untitled")
+  linesOfCode   Int      @default(0)
+  issueCount    Int      @default(0)
+  highSeverity  Int      @default(0)
+  mediumSeverity Int     @default(0)
+  lowSeverity   Int      @default(0)
+  qualityScore  Float    @default(100.0)  // ML-derived quality score
+  complexity    Float    @default(0.0)    // Cyclomatic complexity estimate
+  projectId     String?
+  project       Project? @relation(fields: [projectId], references: [id])
+  userId        String?
+  user          User?    @relation(fields: [userId], references: [id])
+  createdAt     DateTime @default(now())
 }
