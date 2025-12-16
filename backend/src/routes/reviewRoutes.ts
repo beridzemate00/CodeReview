@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createReview, getHistory } from '../controllers/reviewController';
+import { createReview, getHistory, getStats } from '../controllers/reviewController';
 import { authenticateToken } from '../middleware/auth';
 
 const router = Router();
@@ -40,5 +40,6 @@ const optionalAuth = (req: Request, res: Response, next: NextFunction) => {
 
 router.post('/', optionalAuth, createReview);
 router.get('/history', authenticateToken, getHistory);
+router.get('/stats', authenticateToken, getStats);
 
 export default router;
