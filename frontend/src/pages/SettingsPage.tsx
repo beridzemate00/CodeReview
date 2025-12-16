@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Settings, Bell, Moon, Sun, Globe, Shield, Save, RotateCcw, Code2, Eye, Zap, Check } from 'lucide-react';
+import React, { useState } from 'react';
+import { Settings, Bell, Moon, Sun, Globe, Shield, Save, RotateCcw, Code2, Eye, Check } from 'lucide-react';
 import { useSettings } from '../context/SettingsContext';
 
 export const SettingsPage: React.FC = () => {
@@ -146,10 +146,10 @@ export const SettingsPage: React.FC = () => {
                                             updateSettings({ severityFilter: updated });
                                         }}
                                         className={`px-4 py-2 rounded-lg text-sm font-medium transition-all capitalize ${settings.severityFilter.includes(severity)
-                                                ? severity === 'high' ? 'bg-red-600 text-white'
-                                                    : severity === 'medium' ? 'bg-yellow-600 text-white'
-                                                        : 'bg-blue-600 text-white'
-                                                : 'bg-neutral-800 text-neutral-400'
+                                            ? severity === 'high' ? 'bg-red-600 text-white'
+                                                : severity === 'medium' ? 'bg-yellow-600 text-white'
+                                                    : 'bg-blue-600 text-white'
+                                            : 'bg-neutral-800 text-neutral-400'
                                             }`}
                                     >
                                         {severity}
@@ -241,17 +241,20 @@ export const SettingsPage: React.FC = () => {
                 <section className="bg-[#1a1a1a] rounded-xl border border-neutral-800 p-6">
                     <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
                         <Shield className="text-purple-500" size={20} />
-                        API Configuration
+                        AI Configuration
                     </h2>
                     <div className="space-y-4">
                         <div>
-                            <label className="block text-sm font-medium text-neutral-400 mb-2">OpenAI API Key (Optional)</label>
+                            <label className="block text-sm font-medium text-neutral-400 mb-2">
+                                Gemini API Key
+                                {settings.apiKey && <span className="ml-2 text-green-500">✓ Configured</span>}
+                            </label>
                             <div className="relative">
                                 <input
                                     type={apiKeyVisible ? 'text' : 'password'}
                                     value={settings.apiKey}
                                     onChange={(e) => updateSettings({ apiKey: e.target.value })}
-                                    placeholder="sk-..."
+                                    placeholder="Enter your Gemini API key..."
                                     className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-4 py-2 pr-12 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all font-mono"
                                 />
                                 <button
@@ -261,7 +264,13 @@ export const SettingsPage: React.FC = () => {
                                     <Eye size={18} />
                                 </button>
                             </div>
-                            <p className="text-xs text-neutral-500 mt-2">Your key is stored locally and used for enhanced AI suggestions.</p>
+                            <p className="text-xs text-neutral-500 mt-2">
+                                Get your API key from{' '}
+                                <a href="https://aistudio.google.com" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">
+                                    Google AI Studio
+                                </a>
+                                . Your key is stored locally and enables Gemini 2.5 Flash AI-powered code reviews.
+                            </p>
                         </div>
                     </div>
                 </section>
