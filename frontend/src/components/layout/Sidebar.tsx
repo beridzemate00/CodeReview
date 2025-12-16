@@ -80,7 +80,12 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                             onClick={() => navigate('/history')}
                             active={location.pathname === '/history'}
                         />
-                        <SidebarItem icon={<FolderOpen size={18} />} label="Projects" />
+                        <SidebarItem
+                            icon={<FolderOpen size={18} />}
+                            label="Projects"
+                            onClick={() => navigate('/projects')}
+                            active={location.pathname === '/projects'}
+                        />
                         <SidebarItem
                             icon={<Settings size={18} />}
                             label="Settings"
