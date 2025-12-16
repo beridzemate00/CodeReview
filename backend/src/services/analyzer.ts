@@ -80,6 +80,14 @@ export class StaticAnalyzer {
                     rationale: 'Hardcoded credentials can be easily exposed in version control.'
                 });
             }
+            // 7. Type Safety: any check
+            this.checkAnyType(lineContent, line, comments);
+
+            // 8. Bug: Loose equality
+            this.checkLooseEquality(lineContent, line, comments);
+
+            // 9. Style: Empty block
+            this.checkEmptyBlock(lineContent, line, comments);
         });
 
         // 6. Complexity: Long function (naïve) -- just checking total length for demo
@@ -96,4 +104,46 @@ export class StaticAnalyzer {
 
         return comments;
     }
+
+    private checkAnyType(lineContent: string, line: number, comments: ReviewComment[]) {
+        if (lineContent.match(/:\s*any\b/)) {
+            comments.push({
+                id: uuidv4(),
+                type: 'style',
+                severity: 'medium',
+                line,
+                message: 'Usage of "any" type detected',
+                suggestion: 'Use a more specific type or "unknown" if necessary.',
+                rationale: 'Using "any" bypasses TypeScript type checking.'
+            });
+        }
+    }
+
+    private checkLooseEquality(lineContent: string, line: number, comments: ReviewComment[]) {
+        if (lineContent.match(/==[^=]/)) {
+            comments.push({
+                id: uuidv4(),
+                type: 'bug',
+                severity: 'medium',
+                line,
+                message: 'Loose equality usage (==)',
+                suggestion: 'Use strict equality (===) instead.',
+                rationale: 'Loose equality can lead to unexpected type coercion results.'
+            });
+        }
+    }
+
+    private checkEmptyBlock(lineContent: string, line: number, comments: ReviewComment[]) {
+        if (lineContent.match(/\{\s*\}/)) {
+            comments.push({
+                id: uuidv4(),
+                type: 'style',
+                severity: 'low',
+                line,
+                message: 'Empty block detected',
+                rationale: 'Empty blocks may indicate missing logic or can be removed.'
+            });
+        }
+    }
 }
+
