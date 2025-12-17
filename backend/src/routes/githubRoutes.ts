@@ -33,7 +33,6 @@ router.get('/callback', async (req: Request, res: Response): Promise<void> => {
     }
 
     try {
-        // Exchange code for token
         const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
             method: 'POST',
             headers: {
@@ -54,7 +53,6 @@ router.get('/callback', async (req: Request, res: Response): Promise<void> => {
             throw new Error(tokenData.error_description || 'Token exchange failed');
         }
 
-        // Get GitHub user info
         const userResponse = await fetch('https://api.github.com/user', {
             headers: {
                 'Authorization': `Bearer ${tokenData.access_token}`,
@@ -63,8 +61,6 @@ router.get('/callback', async (req: Request, res: Response): Promise<void> => {
         });
 
         const githubUser: any = await userResponse.json();
-
-        // Redirect with success - frontend should handle storing the token
         res.redirect(`/github?github_connected=true&github_user=${githubUser.login}`);
     } catch (error) {
         console.error('GitHub OAuth error:', error);
@@ -216,10 +212,7 @@ router.get('/repos/:owner/:repo/pulls', authenticateToken, async (req: AuthReque
             updatedAt: pr.updated_at,
             url: pr.html_url,
             baseBranch: pr.base?.ref,
-            headBranch: pr.head?.ref,
-            additions: pr.additions,
-            deletions: pr.deletions,
-            changedFiles: pr.changed_files
+            headBranch: pr.head?.ref
         }));
 
         res.json({ pullRequests: formattedPulls });
@@ -229,7 +222,7 @@ router.get('/repos/:owner/:repo/pulls', authenticateToken, async (req: AuthReque
     }
 });
 
-// Get PR diff/files
+// Get PR files
 router.get('/repos/:owner/:repo/pulls/:pull_number/files', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const userId = req.user?.userId;
@@ -269,9 +262,7 @@ router.get('/repos/:owner/:repo/pulls/:pull_number/files', authenticateToken, as
             additions: f.additions,
             deletions: f.deletions,
             changes: f.changes,
-            patch: f.patch,
-            blobUrl: f.blob_url,
-            rawUrl: f.raw_url
+            patch: f.patch
         }));
 
         res.json({ files: formattedFiles });
@@ -297,9 +288,8 @@ router.post('/review-pr', authenticateToken, async (req: AuthRequest, res: Respo
             return;
         }
 
-        const { owner, repo, pullNumber, filePath } = req.body;
+        const { owner, repo, filePath } = req.body;
 
-        // Fetch file content
         const response = await fetch(
             `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`,
             {
@@ -317,112 +307,15 @@ router.post('/review-pr', authenticateToken, async (req: AuthRequest, res: Respo
         const fileData: any = await response.json();
         const content = Buffer.from(fileData.content, 'base64').toString('utf-8');
 
-        // Return the content for review
         res.json({
             content,
             filename: filePath,
             sha: fileData.sha,
-            size: fileData.size,
-            pullRequestUrl: `https://github.com/${owner}/${repo}/pull/${pullNumber}`
+            size: fileData.size
         });
     } catch (error) {
         console.error('Failed to get PR file for review:', error);
         res.status(500).json({ error: 'Failed to fetch file for review' });
-    }
-});
-
-// Post review comment to PR
-router.post('/repos/:owner/:repo/pulls/:pull_number/reviews', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
-    try {
-        const userId = req.user?.userId;
-        if (!userId) {
-            res.status(401).json({ error: 'Unauthorized' });
-            return;
-        }
-
-        const user = await prisma.user.findUnique({ where: { id: userId } });
-
-        if (!user?.githubToken) {
-            res.status(400).json({ error: 'GitHub not connected' });
-            return;
-        }
-
-        const { owner, repo, pull_number } = req.params;
-        const { body, event = 'COMMENT', comments = [] } = req.body;
-
-        const response = await fetch(
-            `https://api.github.com/repos/${owner}/${repo}/pulls/${pull_number}/reviews`,
-            {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${user.githubToken}`,
-                    'Accept': 'application/vnd.github.v3+json',
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    body,
-                    event, // APPROVE, REQUEST_CHANGES, COMMENT
-                    comments
-                })
-            }
-        );
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'Failed to post review');
-        }
-
-        const review = await response.json();
-        res.json({ review });
-    } catch (error) {
-        console.error('Failed to post review:', error);
-        res.status(500).json({ error: 'Failed to post review to GitHub' });
-    }
-});
-
-// Webhook handler for GitHub events
-router.post('/webhook', async (req: Request, res: Response): Promise<void> => {
-    try {
-        const event = req.headers['x-github-event'];
-        const payload = req.body;
-
-        console.log(`Received GitHub webhook: ${event}`);
-
-        if (event === 'pull_request') {
-            const action = payload.action;
-            const pr = payload.pull_request;
-
-            if (action === 'opened' || action === 'synchronize') {
-                // New PR or new commits - could trigger auto-review
-                console.log(`PR ${action}: ${pr.title}`);
-
-                // Find project by repo
-                const project = await prisma.project.findFirst({
-                    where: {
-                        githubOwner: payload.repository.owner.login,
-                        githubRepo: payload.repository.name
-                    }
-                });
-
-                if (project) {
-                    // Create notification for project owner
-                    await prisma.notification.create({
-                        data: {
-                            userId: project.userId,
-                            type: 'pr_opened',
-                            title: 'New Pull Request',
-                            message: `PR #${pr.number}: ${pr.title}`,
-                            link: pr.html_url
-                        }
-                    });
-                }
-            }
-        }
-
-        res.status(200).json({ received: true });
-    } catch (error) {
-        console.error('Webhook error:', error);
-        res.status(500).json({ error: 'Webhook processing failed' });
     }
 });
 
