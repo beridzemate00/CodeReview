@@ -1,6 +1,9 @@
+// Load environment variables FIRST, before any other imports
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express, { Request, Response } from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import authRoutes from './routes/authRoutes';
@@ -12,8 +15,6 @@ import snippetRoutes from './routes/snippetRoutes';
 import notificationRoutes from './routes/notificationRoutes';
 import githubRoutes from './routes/githubRoutes';
 import uploadRoutes from './routes/uploadRoutes';
-
-dotenv.config();
 
 const app = express();
 const httpServer = createServer(app);
