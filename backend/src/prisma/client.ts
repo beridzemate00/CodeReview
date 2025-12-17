@@ -1,5 +1,7 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../../generated/prisma/client';
+import { withAccelerate } from '@prisma/extension-accelerate';
 
-const prisma = new PrismaClient();
+// Create Prisma client with Accelerate extension for cloud database
+const prisma = new PrismaClient().$extends(withAccelerate());
 
 export default prisma;
