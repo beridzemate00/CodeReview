@@ -11,9 +11,10 @@ const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET;
 const GITHUB_REDIRECT_URI = process.env.GITHUB_REDIRECT_URI || 'http://localhost:3000/api/github/callback';
 
 // Generate OAuth URL
-router.get('/auth-url', authenticateToken, (req: AuthRequest, res: Response) => {
+router.get('/auth-url', authenticateToken, (req: AuthRequest, res: Response): void => {
     if (!GITHUB_CLIENT_ID) {
-        return res.status(500).json({ error: 'GitHub OAuth not configured' });
+        res.status(500).json({ error: 'GitHub OAuth not configured on server' });
+        return;
     }
 
     const state = crypto.randomBytes(16).toString('hex');
@@ -23,11 +24,12 @@ router.get('/auth-url', authenticateToken, (req: AuthRequest, res: Response) => 
 });
 
 // OAuth callback
-router.get('/callback', async (req: Request, res: Response) => {
-    const { code, state } = req.query;
+router.get('/callback', async (req: Request, res: Response): Promise<void> => {
+    const { code } = req.query;
 
     if (!code) {
-        return res.redirect('/settings?error=github_auth_failed');
+        res.redirect('/github?error=github_auth_failed');
+        return;
     }
 
     try {
@@ -62,20 +64,22 @@ router.get('/callback', async (req: Request, res: Response) => {
 
         const githubUser: any = await userResponse.json();
 
-        // Store token (for now, redirect with success)
-        // In production, you'd associate this with the logged-in user
-        res.redirect(`/settings?github_connected=true&github_user=${githubUser.login}`);
+        // Redirect with success - frontend should handle storing the token
+        res.redirect(`/github?github_connected=true&github_user=${githubUser.login}`);
     } catch (error) {
         console.error('GitHub OAuth error:', error);
-        res.redirect('/settings?error=github_auth_failed');
+        res.redirect('/github?error=github_auth_failed');
     }
 });
 
 // Connect GitHub to user account
-router.post('/connect', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.post('/connect', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const userId = req.user?.userId;
-        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+        if (!userId) {
+            res.status(401).json({ error: 'Unauthorized' });
+            return;
+        }
 
         const { accessToken, githubId } = req.body;
 
@@ -95,10 +99,13 @@ router.post('/connect', authenticateToken, async (req: AuthRequest, res: Respons
 });
 
 // Disconnect GitHub
-router.delete('/disconnect', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.delete('/disconnect', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const userId = req.user?.userId;
-        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+        if (!userId) {
+            res.status(401).json({ error: 'Unauthorized' });
+            return;
+        }
 
         await prisma.user.update({
             where: { id: userId },
@@ -116,13 +123,19 @@ router.delete('/disconnect', authenticateToken, async (req: AuthRequest, res: Re
 });
 
 // Get user's repositories
-router.get('/repos', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.get('/repos', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const userId = req.user?.userId;
+        if (!userId) {
+            res.status(401).json({ error: 'Unauthorized' });
+            return;
+        }
+
         const user = await prisma.user.findUnique({ where: { id: userId } });
 
         if (!user?.githubToken) {
-            return res.status(400).json({ error: 'GitHub not connected' });
+            res.status(400).json({ error: 'GitHub not connected' });
+            return;
         }
 
         const response = await fetch('https://api.github.com/user/repos?sort=updated&per_page=100', {
@@ -158,13 +171,19 @@ router.get('/repos', authenticateToken, async (req: AuthRequest, res: Response) 
 });
 
 // Get pull requests for a repo
-router.get('/repos/:owner/:repo/pulls', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.get('/repos/:owner/:repo/pulls', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const userId = req.user?.userId;
+        if (!userId) {
+            res.status(401).json({ error: 'Unauthorized' });
+            return;
+        }
+
         const user = await prisma.user.findUnique({ where: { id: userId } });
 
         if (!user?.githubToken) {
-            return res.status(400).json({ error: 'GitHub not connected' });
+            res.status(400).json({ error: 'GitHub not connected' });
+            return;
         }
 
         const { owner, repo } = req.params;
@@ -211,13 +230,19 @@ router.get('/repos/:owner/:repo/pulls', authenticateToken, async (req: AuthReque
 });
 
 // Get PR diff/files
-router.get('/repos/:owner/:repo/pulls/:pull_number/files', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.get('/repos/:owner/:repo/pulls/:pull_number/files', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const userId = req.user?.userId;
+        if (!userId) {
+            res.status(401).json({ error: 'Unauthorized' });
+            return;
+        }
+
         const user = await prisma.user.findUnique({ where: { id: userId } });
 
         if (!user?.githubToken) {
-            return res.status(400).json({ error: 'GitHub not connected' });
+            res.status(400).json({ error: 'GitHub not connected' });
+            return;
         }
 
         const { owner, repo, pull_number } = req.params;
@@ -257,13 +282,19 @@ router.get('/repos/:owner/:repo/pulls/:pull_number/files', authenticateToken, as
 });
 
 // Review a PR file
-router.post('/review-pr', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.post('/review-pr', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const userId = req.user?.userId;
+        if (!userId) {
+            res.status(401).json({ error: 'Unauthorized' });
+            return;
+        }
+
         const user = await prisma.user.findUnique({ where: { id: userId } });
 
         if (!user?.githubToken) {
-            return res.status(400).json({ error: 'GitHub not connected' });
+            res.status(400).json({ error: 'GitHub not connected' });
+            return;
         }
 
         const { owner, repo, pullNumber, filePath } = req.body;
@@ -301,13 +332,19 @@ router.post('/review-pr', authenticateToken, async (req: AuthRequest, res: Respo
 });
 
 // Post review comment to PR
-router.post('/repos/:owner/:repo/pulls/:pull_number/reviews', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.post('/repos/:owner/:repo/pulls/:pull_number/reviews', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const userId = req.user?.userId;
+        if (!userId) {
+            res.status(401).json({ error: 'Unauthorized' });
+            return;
+        }
+
         const user = await prisma.user.findUnique({ where: { id: userId } });
 
         if (!user?.githubToken) {
-            return res.status(400).json({ error: 'GitHub not connected' });
+            res.status(400).json({ error: 'GitHub not connected' });
+            return;
         }
 
         const { owner, repo, pull_number } = req.params;
@@ -344,7 +381,7 @@ router.post('/repos/:owner/:repo/pulls/:pull_number/reviews', authenticateToken,
 });
 
 // Webhook handler for GitHub events
-router.post('/webhook', async (req: Request, res: Response) => {
+router.post('/webhook', async (req: Request, res: Response): Promise<void> => {
     try {
         const event = req.headers['x-github-event'];
         const payload = req.body;
