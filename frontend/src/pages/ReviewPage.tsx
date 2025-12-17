@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import Editor from '@monaco-editor/react';
-import { Play, Clipboard, FileText, Brain, Shield, Zap, BookOpen, Bug } from 'lucide-react';
+import { Play, Clipboard, FileText, Brain, Shield, Zap, BookOpen, Bug, Upload, X, File, Loader2, ChevronDown, Save, Copy, Check } from 'lucide-react';
 import { ReviewCard } from '../components/review/ReviewCard';
 import { useSettings } from '../context/SettingsContext';
+import { useAuth } from '../context/AuthContext';
 
 interface MLMetrics {
     linesOfCode: number;
@@ -25,65 +26,79 @@ interface ReviewStats {
     predictedBugRisk?: number;
 }
 
-export function ReviewPage() {
-    const { settings } = useSettings();
-    const [code, setCode] = useState(`// Paste your code here to review...
-
-function calculateTotal(items) {
-  let total = 0;
-  for (let i = 0; i < items.length; i++) {
-    total += items[i].price;
-  }
-  return total;
+interface UploadedFile {
+    name: string;
+    size: number;
+    content: string;
+    language: string;
 }
 
-// TODO: Add validation
-const password = "secret123";
-console.log("Debug:", password);
-`);
+export function ReviewPage() {
+    const { settings } = useSettings();
+    const { isAuthenticated } = useAuth();
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const [code, setCode] = useState('// Paste or type your code here...\n\nfunction example() {\n    console.log("Hello, World!");\n}');
     const [language, setLanguage] = useState(settings.defaultLanguage || 'typescript');
-    const [isReviewing, setIsReviewing] = useState(false);
     const [reviews, setReviews] = useState<any[]>([]);
+    const [loading, setLoading] = useState(false);
     const [stats, setStats] = useState<ReviewStats | null>(null);
     const [mlMetrics, setMlMetrics] = useState<MLMetrics | null>(null);
+    const [aiSummary, setAiSummary] = useState<string | null>(null);
+    const [suggestedImprovements, setSuggestedImprovements] = useState<string[]>([]);
+    const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+    const [isDragging, setIsDragging] = useState(false);
+    const [copied, setCopied] = useState(false);
+    const [selectedProject] = useState<string>('');
+    const [showAdvanced, setShowAdvanced] = useState(false);
+    const [enableML, setEnableML] = useState(true);
+    const [enableAI, setEnableAI] = useState(settings.enableAI);
 
     const handleReview = async () => {
-        setIsReviewing(true);
+        if (!code.trim() || loading) return;
+
+        setLoading(true);
         setReviews([]);
         setStats(null);
         setMlMetrics(null);
+        setAiSummary(null);
+        setSuggestedImprovements([]);
 
         try {
             const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+            const token = localStorage.getItem('token');
+
             const response = await fetch(`${apiUrl}/api/review`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
                 },
                 body: JSON.stringify({
                     code,
                     language,
-                    enableML: settings.enableAI,
-                    enableAI: settings.enableAI && !!settings.apiKey,
-                    apiKey: settings.apiKey || undefined,
-                    fileName: 'review.ts'
+                    projectId: selectedProject || undefined,
+                    enableML,
+                    enableAI,
+                    apiKey: settings.apiKey || undefined
                 }),
             });
+
             const data = await response.json();
 
-            // Filter by severity settings
-            const filteredReviews = (data.reviews || []).filter((r: any) =>
-                settings.severityFilter.includes(r.severity)
-            );
+            if (!response.ok) {
+                throw new Error(data.error || 'Review failed');
+            }
 
-            setReviews(filteredReviews);
-            setStats(data.stats || null);
-            setMlMetrics(data.mlMetrics || null);
+            setReviews(data.reviews || []);
+            setStats(data.stats);
+            setMlMetrics(data.mlMetrics);
+            setAiSummary(data.aiSummary);
+            setSuggestedImprovements(data.suggestedImprovements || []);
         } catch (error) {
-            console.error('Failed to fetch reviews', error);
+            console.error('Review failed:', error);
         } finally {
-            setIsReviewing(false);
+            setLoading(false);
         }
     };
 
@@ -91,213 +106,400 @@ console.log("Debug:", password);
         try {
             const text = await navigator.clipboard.readText();
             setCode(text);
-        } catch (err) {
-            console.error('Failed to read clipboard');
+        } catch (error) {
+            console.error('Failed to paste:', error);
         }
     };
 
-    const getScoreColor = (score: number) => {
+    const handleCopy = async () => {
+        await navigator.clipboard.writeText(code);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
+
+    const handleDrop = useCallback((e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(false);
+
+        const files = Array.from(e.dataTransfer.files);
+        processFiles(files);
+    }, []);
+
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files ? Array.from(e.target.files) : [];
+        processFiles(files);
+    };
+
+    const processFiles = async (files: File[]) => {
+        const codeExtensions = ['.js', '.jsx', '.ts', '.tsx', '.py', '.java', '.go', '.rs', '.cpp', '.c', '.rb', '.php', '.swift', '.kt', '.cs'];
+
+        const codeFiles = files.filter(f => codeExtensions.some(ext => f.name.endsWith(ext)));
+
+        if (codeFiles.length === 0) {
+            alert('Please upload code files');
+            return;
+        }
+
+        const processed: UploadedFile[] = [];
+
+        for (const file of codeFiles) {
+            const content = await file.text();
+            const ext = file.name.split('.').pop()?.toLowerCase() || '';
+            const langMap: Record<string, string> = {
+                js: 'javascript', jsx: 'javascript', ts: 'typescript', tsx: 'typescript',
+                py: 'python', java: 'java', go: 'go', rs: 'rust', cpp: 'cpp', c: 'c',
+                rb: 'ruby', php: 'php', swift: 'swift', kt: 'kotlin', cs: 'csharp'
+            };
+
+            processed.push({
+                name: file.name,
+                size: file.size,
+                content,
+                language: langMap[ext] || 'plaintext'
+            });
+        }
+
+        setUploadedFiles(processed);
+
+        // If single file, load it into editor
+        if (processed.length === 1) {
+            setCode(processed[0].content);
+            setLanguage(processed[0].language);
+            setUploadedFiles([]);
+        }
+    };
+
+    const handleUploadReview = async () => {
+        if (uploadedFiles.length === 0) return;
+
+        setLoading(true);
+        setReviews([]);
+
+        try {
+            const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+            const token = localStorage.getItem('token');
+
+            const formData = new FormData();
+            // Create blobs from file contents
+            for (const file of uploadedFiles) {
+                const blob = new Blob([file.content], { type: 'text/plain' });
+                formData.append('files', blob, file.name);
+            }
+            formData.append('enableML', String(enableML));
+            formData.append('enableAI', String(enableAI));
+            if (selectedProject) formData.append('projectId', selectedProject);
+            if (settings.apiKey) formData.append('apiKey', settings.apiKey);
+
+            const response = await fetch(`${apiUrl}/api/upload/files`, {
+                method: 'POST',
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+                body: formData
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) throw new Error(data.error);
+
+            // Combine reviews from all files
+            const allReviews = data.results?.flatMap((r: any) => r.reviews?.map((rev: any) => ({ ...rev, fileName: r.fileName })) || []) || [];
+            setReviews(allReviews);
+
+            if (data.summary) {
+                setStats({
+                    totalIssues: data.summary.totalIssues,
+                    highSeverity: allReviews.filter((r: any) => r.severity === 'high').length,
+                    mediumSeverity: allReviews.filter((r: any) => r.severity === 'medium').length,
+                    lowSeverity: allReviews.filter((r: any) => r.severity === 'low').length,
+                    qualityScore: data.summary.avgQualityScore
+                });
+            }
+
+            setUploadedFiles([]);
+        } catch (error: any) {
+            console.error('Upload review failed:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const getScoreColor = (score: number): string => {
         if (score >= 80) return 'text-green-500';
         if (score >= 60) return 'text-yellow-500';
         return 'text-red-500';
     };
 
-    const getScoreBg = (score: number) => {
-        if (score >= 80) return 'bg-green-500';
-        if (score >= 60) return 'bg-yellow-500';
-        return 'bg-red-500';
+    const getScoreBg = (score: number): string => {
+        if (score >= 80) return 'bg-green-500/10';
+        if (score >= 60) return 'bg-yellow-500/10';
+        return 'bg-red-500/10';
     };
 
     const languages = [
-        'javascript', 'typescript', 'python', 'java', 'go', 'rust',
-        'cpp', 'csharp', 'ruby', 'php', 'swift', 'kotlin'
+        { value: 'typescript', label: 'TypeScript' },
+        { value: 'javascript', label: 'JavaScript' },
+        { value: 'python', label: 'Python' },
+        { value: 'java', label: 'Java' },
+        { value: 'go', label: 'Go' },
+        { value: 'rust', label: 'Rust' },
+        { value: 'cpp', label: 'C++' },
+        { value: 'csharp', label: 'C#' },
+        { value: 'ruby', label: 'Ruby' },
+        { value: 'php', label: 'PHP' },
+        { value: 'swift', label: 'Swift' },
+        { value: 'kotlin', label: 'Kotlin' }
     ];
 
     return (
-        <div className="h-[calc(100vh-140px)] flex flex-col gap-6">
+        <div className="animate-fadeIn">
+            <div className="flex flex-col lg:flex-row gap-6">
+                {/* Editor Section */}
+                <div className="lg:w-1/2 space-y-4">
+                    <div className="flex items-center justify-between">
+                        <h1 className="text-2xl font-bold text-[var(--text-primary)]">Code Review</h1>
+                        <div className="flex items-center gap-2">
+                            <select
+                                value={language}
+                                onChange={(e) => setLanguage(e.target.value)}
+                                className="input py-1.5 px-3 w-auto text-sm"
+                            >
+                                {languages.map(l => (
+                                    <option key={l.value} value={l.value}>{l.label}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
 
-            {/* Header Actions */}
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-2xl font-semibold text-white">Code Review</h1>
-                    <p className="text-neutral-400 mt-1">Paste your code below to get instant AI-powered feedback.</p>
-                </div>
-                <div className="flex items-center space-x-3">
-                    <select
-                        value={language}
-                        onChange={(e) => setLanguage(e.target.value)}
-                        className="px-3 py-2 rounded-lg bg-neutral-800 border border-neutral-700 text-white text-sm font-medium capitalize"
-                    >
-                        {languages.map(lang => (
-                            <option key={lang} value={lang}>{lang}</option>
-                        ))}
-                    </select>
+                    {/* File Upload Zone */}
+                    {uploadedFiles.length === 0 && (
+                        <div
+                            className={`dropzone ${isDragging ? 'active' : ''}`}
+                            onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
+                            onDragLeave={() => setIsDragging(false)}
+                            onDrop={handleDrop}
+                            onClick={() => fileInputRef.current?.click()}
+                        >
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                multiple
+                                accept=".js,.jsx,.ts,.tsx,.py,.java,.go,.rs,.cpp,.c,.rb,.php,.swift,.kt,.cs"
+                                onChange={handleFileSelect}
+                                className="hidden"
+                            />
+                            <Upload size={32} className="mx-auto text-[var(--text-muted)] mb-3" />
+                            <p className="text-[var(--text-primary)] font-medium">Drop files here or click to upload</p>
+                            <p className="text-sm text-[var(--text-muted)] mt-1">Supports multiple code files</p>
+                        </div>
+                    )}
+
+                    {/* Uploaded Files List */}
+                    {uploadedFiles.length > 0 && (
+                        <div className="card p-4">
+                            <div className="flex items-center justify-between mb-3">
+                                <h3 className="font-medium text-[var(--text-primary)]">{uploadedFiles.length} files ready for review</h3>
+                                <button onClick={() => setUploadedFiles([])} className="text-[var(--text-muted)] hover:text-[var(--text-primary)]">
+                                    <X size={18} />
+                                </button>
+                            </div>
+                            <div className="space-y-2 max-h-32 overflow-y-auto">
+                                {uploadedFiles.map((file, i) => (
+                                    <div key={i} className="flex items-center gap-2 text-sm">
+                                        <File size={14} className="text-[var(--text-muted)]" />
+                                        <span className="text-[var(--text-primary)] truncate flex-1">{file.name}</span>
+                                        <span className="text-[var(--text-muted)]">{(file.size / 1024).toFixed(1)}KB</span>
+                                    </div>
+                                ))}
+                            </div>
+                            <button
+                                onClick={handleUploadReview}
+                                disabled={loading}
+                                className="btn btn-primary w-full mt-4"
+                            >
+                                {loading ? <><Loader2 size={18} className="animate-spin" /> Reviewing...</> : <><Play size={18} /> Review All Files</>}
+                            </button>
+                        </div>
+                    )}
+
+                    {/* Code Editor */}
+                    <div className="card overflow-hidden">
+                        <div className="flex items-center justify-between px-4 py-2 bg-[var(--bg-tertiary)] border-b border-[var(--border-primary)]">
+                            <span className="text-sm text-[var(--text-muted)]">Code Editor</span>
+                            <div className="flex gap-1">
+                                <button onClick={handlePaste} className="btn btn-ghost text-xs py-1 px-2">
+                                    <Clipboard size={14} /> Paste
+                                </button>
+                                <button onClick={handleCopy} className="btn btn-ghost text-xs py-1 px-2">
+                                    {copied ? <><Check size={14} /> Copied</> : <><Copy size={14} /> Copy</>}
+                                </button>
+                            </div>
+                        </div>
+                        <Editor
+                            height="350px"
+                            language={language}
+                            value={code}
+                            onChange={(value) => setCode(value || '')}
+                            theme="vs-dark"
+                            options={{
+                                minimap: { enabled: false },
+                                fontSize: settings.fontSize || 14,
+                                lineNumbers: settings.showLineNumbers ? 'on' : 'off',
+                                scrollBeyondLastLine: false,
+                                wordWrap: 'on',
+                                padding: { top: 16 }
+                            }}
+                        />
+                    </div>
+
+                    {/* Advanced Options */}
                     <button
-                        onClick={handlePaste}
-                        className="flex items-center space-x-2 px-4 py-2 rounded-lg border border-neutral-700 hover:bg-neutral-800 transition-colors text-neutral-300 font-medium text-sm"
+                        onClick={() => setShowAdvanced(!showAdvanced)}
+                        className="flex items-center gap-2 text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
                     >
-                        <Clipboard size={16} />
-                        <span>Paste</span>
+                        <ChevronDown size={16} className={`transition-transform ${showAdvanced ? 'rotate-180' : ''}`} />
+                        Advanced Options
                     </button>
+
+                    {showAdvanced && (
+                        <div className="card p-4 space-y-4 animate-fadeIn">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <Brain size={18} className="text-[var(--accent-purple)]" />
+                                    <span className="text-sm text-[var(--text-primary)]">ML Analysis</span>
+                                </div>
+                                <button
+                                    onClick={() => setEnableML(!enableML)}
+                                    className={`w-10 h-6 rounded-full transition-colors ${enableML ? 'bg-[var(--accent-blue)]' : 'bg-[var(--bg-tertiary)]'}`}
+                                >
+                                    <div className={`w-4 h-4 bg-white rounded-full transition-transform ${enableML ? 'translate-x-5' : 'translate-x-1'}`} />
+                                </button>
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <Zap size={18} className="text-[var(--accent-yellow)]" />
+                                    <span className="text-sm text-[var(--text-primary)]">AI Analysis (Gemini)</span>
+                                </div>
+                                <button
+                                    onClick={() => setEnableAI(!enableAI)}
+                                    className={`w-10 h-6 rounded-full transition-colors ${enableAI ? 'bg-[var(--accent-blue)]' : 'bg-[var(--bg-tertiary)]'}`}
+                                >
+                                    <div className={`w-4 h-4 bg-white rounded-full transition-transform ${enableAI ? 'translate-x-5' : 'translate-x-1'}`} />
+                                </button>
+                            </div>
+                            {!settings.apiKey && enableAI && (
+                                <p className="text-xs text-[var(--accent-yellow)]">⚠️ Add Gemini API key in Settings for AI analysis</p>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Review Button */}
                     <button
                         onClick={handleReview}
-                        disabled={isReviewing}
-                        className="flex items-center space-x-2 px-6 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 transition-all text-white font-medium text-sm shadow-lg shadow-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={loading || !code.trim()}
+                        className="btn btn-primary w-full py-3 text-base"
                     >
-                        {isReviewing ? (
-                            <>
-                                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                <span>Analyzing...</span>
-                            </>
+                        {loading ? (
+                            <><Loader2 size={20} className="animate-spin" /> Analyzing...</>
                         ) : (
-                            <>
-                                <Play size={16} />
-                                <span>Start Review</span>
-                            </>
+                            <><Play size={20} /> Review Code</>
                         )}
                     </button>
                 </div>
-            </div>
-
-            {/* Main Content Split View */}
-            <div className="flex-1 grid grid-cols-2 gap-6 min-h-0">
-
-                {/* Editor Section */}
-                <div className="bg-[#1e1e1e] rounded-xl overflow-hidden border border-neutral-800 flex flex-col shadow-2xl">
-                    <div className="bg-[#252526] px-4 py-2 border-b border-neutral-800 flex items-center justify-between">
-                        <div className="flex items-center space-x-2">
-                            <span className="w-3 h-3 rounded-full bg-red-500/20 border border-red-500/50"></span>
-                            <span className="w-3 h-3 rounded-full bg-yellow-500/20 border border-yellow-500/50"></span>
-                            <span className="w-3 h-3 rounded-full bg-green-500/20 border border-green-500/50"></span>
-                        </div>
-                        <span className="text-xs text-neutral-500 font-mono capitalize">{language}</span>
-                    </div>
-                    <Editor
-                        height="100%"
-                        language={language}
-                        theme="vs-dark"
-                        value={code}
-                        onChange={(value) => setCode(value || '')}
-                        options={{
-                            minimap: { enabled: false },
-                            fontSize: settings.fontSize,
-                            lineNumbers: settings.showLineNumbers ? 'on' : 'off',
-                            padding: { top: 20 },
-                            scrollBeyondLastLine: false,
-                            fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
-                        }}
-                    />
-                </div>
 
                 {/* Results Section */}
-                <div className="bg-[#0F0F0F] rounded-xl border border-neutral-800 flex flex-col overflow-hidden">
-                    {!isReviewing && reviews.length === 0 && !stats ? (
-                        <div className="flex flex-col items-center justify-center h-full text-center space-y-4 p-6">
-                            <div className="w-16 h-16 rounded-full bg-neutral-800/50 flex items-center justify-center mb-2">
-                                <FileText size={32} className="text-neutral-600" />
+                <div className="lg:w-1/2 space-y-4">
+                    {/* Stats Cards */}
+                    {stats && (
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            <div className={`stat-card p-4 ${getScoreBg(stats.qualityScore)}`}>
+                                <FileText size={18} className={getScoreColor(stats.qualityScore)} />
+                                <p className={`text-2xl font-bold mt-2 ${getScoreColor(stats.qualityScore)}`}>{Math.round(stats.qualityScore)}%</p>
+                                <p className="text-xs text-[var(--text-muted)]">Quality</p>
                             </div>
-                            <h3 className="text-lg font-medium text-white">Ready to Review</h3>
-                            <p className="text-neutral-500 max-w-sm">
-                                Your code analysis will appear here. We'll check for bugs, security vulnerabilities, and suggest improvements.
-                            </p>
-                            {settings.enableAI && (
-                                <div className="flex items-center gap-2 text-sm text-blue-400">
-                                    <Brain size={16} />
-                                    ML-powered analysis enabled
+                            <div className="stat-card p-4">
+                                <Bug size={18} className="text-[var(--accent-red)]" />
+                                <p className="text-2xl font-bold mt-2 text-[var(--text-primary)]">{stats.totalIssues}</p>
+                                <p className="text-xs text-[var(--text-muted)]">Issues</p>
+                            </div>
+                            <div className="stat-card p-4">
+                                <Shield size={18} className="text-[var(--accent-orange)]" />
+                                <p className="text-2xl font-bold mt-2 text-[var(--text-primary)]">{stats.highSeverity}</p>
+                                <p className="text-xs text-[var(--text-muted)]">High</p>
+                            </div>
+                            <div className="stat-card p-4">
+                                <BookOpen size={18} className="text-[var(--accent-blue)]" />
+                                <p className="text-2xl font-bold mt-2 text-[var(--text-primary)]">{stats.mediumSeverity + stats.lowSeverity}</p>
+                                <p className="text-xs text-[var(--text-muted)]">Suggestions</p>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ML Metrics */}
+                    {mlMetrics && (
+                        <div className="card p-4">
+                            <h3 className="font-medium text-[var(--text-primary)] mb-3 flex items-center gap-2">
+                                <Brain size={18} className="text-[var(--accent-purple)]" /> ML Metrics
+                            </h3>
+                            <div className="grid grid-cols-3 gap-4 text-sm">
+                                <div>
+                                    <p className="text-[var(--text-muted)]">Lines</p>
+                                    <p className="font-medium text-[var(--text-primary)]">{mlMetrics.linesOfCode}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[var(--text-muted)]">Functions</p>
+                                    <p className="font-medium text-[var(--text-primary)]">{mlMetrics.functionCount}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[var(--text-muted)]">Nesting</p>
+                                    <p className="font-medium text-[var(--text-primary)]">{mlMetrics.nestingDepth}</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* AI Summary */}
+                    {aiSummary && (
+                        <div className="card p-4 bg-gradient-to-br from-[var(--accent-blue)]/5 to-[var(--accent-purple)]/5 border-[var(--accent-blue)]/20">
+                            <h3 className="font-medium text-[var(--text-primary)] mb-2 flex items-center gap-2">
+                                <Zap size={18} className="text-[var(--accent-blue)]" /> AI Summary
+                            </h3>
+                            <p className="text-sm text-[var(--text-secondary)]">{aiSummary}</p>
+                            {suggestedImprovements.length > 0 && (
+                                <div className="mt-3 pt-3 border-t border-[var(--border-primary)]">
+                                    <p className="text-xs font-medium text-[var(--text-muted)] mb-2">Suggested Improvements:</p>
+                                    <ul className="space-y-1">
+                                        {suggestedImprovements.slice(0, 3).map((imp, i) => (
+                                            <li key={i} className="text-xs text-[var(--text-secondary)] flex items-start gap-2">
+                                                <span className="text-[var(--accent-blue)]">→</span> {imp}
+                                            </li>
+                                        ))}
+                                    </ul>
                                 </div>
                             )}
                         </div>
-                    ) : isReviewing ? (
-                        <div className="p-6 space-y-4 animate-pulse">
-                            <div className="h-4 bg-neutral-800 rounded w-3/4"></div>
-                            <div className="h-4 bg-neutral-800 rounded w-1/2"></div>
-                            <div className="h-24 bg-neutral-800 rounded w-full mt-6"></div>
-                            <div className="h-24 bg-neutral-800 rounded w-full"></div>
-                        </div>
-                    ) : (
-                        <div className="flex flex-col h-full overflow-hidden">
-                            {/* Stats Bar */}
-                            {stats && (
-                                <div className="p-4 border-b border-neutral-800 bg-neutral-900/50">
-                                    <div className="flex items-center justify-between mb-4">
-                                        <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-                                            <Brain className="text-blue-500" size={20} />
-                                            Analysis Results
-                                        </h3>
-                                        <div className={`px-4 py-2 rounded-lg ${getScoreBg(stats.qualityScore)}/20 border ${getScoreBg(stats.qualityScore)}/30`}>
-                                            <span className={`text-2xl font-bold ${getScoreColor(stats.qualityScore)}`}>
-                                                {stats.qualityScore}
-                                            </span>
-                                            <span className="text-neutral-500 text-sm">/100</span>
-                                        </div>
-                                    </div>
+                    )}
 
-                                    {/* Score Breakdown */}
-                                    {stats.readabilityScore !== undefined && (
-                                        <div className="grid grid-cols-4 gap-3 mb-4">
-                                            <div className="bg-neutral-800/50 rounded-lg p-3 text-center">
-                                                <BookOpen size={16} className="mx-auto text-blue-400 mb-1" />
-                                                <div className={`text-lg font-bold ${getScoreColor(stats.readabilityScore)}`}>
-                                                    {stats.readabilityScore}
-                                                </div>
-                                                <div className="text-xs text-neutral-500">Readability</div>
-                                            </div>
-                                            <div className="bg-neutral-800/50 rounded-lg p-3 text-center">
-                                                <Zap size={16} className="mx-auto text-yellow-400 mb-1" />
-                                                <div className={`text-lg font-bold ${getScoreColor(stats.performanceScore || 0)}`}>
-                                                    {stats.performanceScore}
-                                                </div>
-                                                <div className="text-xs text-neutral-500">Performance</div>
-                                            </div>
-                                            <div className="bg-neutral-800/50 rounded-lg p-3 text-center">
-                                                <Shield size={16} className="mx-auto text-green-400 mb-1" />
-                                                <div className={`text-lg font-bold ${getScoreColor(stats.securityScore || 0)}`}>
-                                                    {stats.securityScore}
-                                                </div>
-                                                <div className="text-xs text-neutral-500">Security</div>
-                                            </div>
-                                            <div className="bg-neutral-800/50 rounded-lg p-3 text-center">
-                                                <Bug size={16} className="mx-auto text-red-400 mb-1" />
-                                                <div className={`text-lg font-bold ${getScoreColor(100 - (stats.predictedBugRisk || 0))}`}>
-                                                    {stats.predictedBugRisk}%
-                                                </div>
-                                                <div className="text-xs text-neutral-500">Bug Risk</div>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Issue Summary */}
-                                    <div className="flex items-center gap-4 text-sm">
-                                        <span className="flex items-center gap-1 text-red-400">
-                                            <span className="w-2 h-2 rounded-full bg-red-500"></span>
-                                            {stats.highSeverity} high
-                                        </span>
-                                        <span className="flex items-center gap-1 text-yellow-400">
-                                            <span className="w-2 h-2 rounded-full bg-yellow-500"></span>
-                                            {stats.mediumSeverity} medium
-                                        </span>
-                                        <span className="flex items-center gap-1 text-blue-400">
-                                            <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                                            {stats.lowSeverity} low
-                                        </span>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Reviews List */}
-                            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                                {reviews.length === 0 ? (
-                                    <div className="text-center text-green-400 py-8">
-                                        <Shield size={32} className="mx-auto mb-2" />
-                                        <p>No issues found! Your code looks great.</p>
-                                    </div>
-                                ) : (
-                                    reviews.map((review) => (
-                                        <ReviewCard key={review.id} review={review} />
-                                    ))
-                                )}
+                    {/* Review Results */}
+                    <div className="space-y-3">
+                        {reviews.length === 0 && !loading && (
+                            <div className="card p-8 text-center">
+                                <FileText size={32} className="mx-auto text-[var(--text-muted)] mb-3" />
+                                <p className="text-[var(--text-muted)]">Review results will appear here</p>
                             </div>
-                        </div>
+                        )}
+
+                        {reviews.map((review, index) => (
+                            <ReviewCard key={review.id || index} review={review} />
+                        ))}
+                    </div>
+
+                    {/* Save to Snippets (if authenticated and has code) */}
+                    {isAuthenticated && stats && (
+                        <button
+                            onClick={() => {/* Navigate to snippets with pre-filled data */ }}
+                            className="btn btn-secondary w-full"
+                        >
+                            <Save size={18} /> Save to Snippets
+                        </button>
                     )}
                 </div>
             </div>

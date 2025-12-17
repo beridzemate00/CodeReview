@@ -1,32 +1,38 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mail, Lock, ArrowRight, UserPlus, LogIn } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { Code2, Mail, Lock, User, Eye, EyeOff, ArrowRight, Loader2, AlertCircle, Github, Sparkles } from 'lucide-react';
 
 export function LoginPage() {
+    const navigate = useNavigate();
+    const { login } = useAuth();
+
     const [isLogin, setIsLogin] = useState(true);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [name, setName] = useState('');
-    const [error, setError] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
-    const navigate = useNavigate();
-    const { login } = useAuth(); // Destructure login
+    const [error, setError] = useState('');
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setError('');
-        setLoading(true);
+        if (!email || !password || (!isLogin && !name)) {
+            setError('Please fill in all fields');
+            return;
+        }
 
-        const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
-        const body = isLogin ? { email, password } : { email, password, name };
+        setLoading(true);
+        setError('');
 
         try {
             const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+            const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
+
             const response = await fetch(`${apiUrl}${endpoint}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body),
+                body: JSON.stringify(isLogin ? { email, password } : { email, password, name }),
             });
 
             const data = await response.json();
@@ -35,106 +41,188 @@ export function LoginPage() {
                 throw new Error(data.error || 'Authentication failed');
             }
 
-            login(data.token, data.user); // Use context login
-            navigate('/');
+            login(data.token, data.user);
+            navigate('/dashboard');
         } catch (err: any) {
-            setError(err.message);
+            setError(err.message || 'Something went wrong');
         } finally {
             setLoading(false);
         }
     };
 
+    const features = [
+        { icon: '🔍', text: 'AI-powered code analysis' },
+        { icon: '🛡️', text: 'Security vulnerability detection' },
+        { icon: '⚡', text: 'Performance optimization tips' },
+        { icon: '📊', text: 'Detailed quality metrics' },
+    ];
+
     return (
-        <div className="flex flex-col items-center justify-center min-h-[calc(100vh-100px)]">
-            <div className="w-full max-w-md bg-[#1e1e1e] border border-neutral-800 rounded-xl p-8 shadow-2xl">
-                <div className="flex flex-col items-center mb-8">
-                    <div className="bg-gradient-to-tr from-blue-600 to-purple-600 p-3 rounded-xl mb-4 shadow-lg shadow-blue-500/20">
-                        {isLogin ? <LogIn className="text-white" size={24} /> : <UserPlus className="text-white" size={24} />}
+        <div className="min-h-[80vh] flex items-center justify-center px-4">
+            <div className="w-full max-w-5xl grid md:grid-cols-2 gap-8 items-center">
+                {/* Left side - Branding */}
+                <div className="hidden md:block">
+                    <div className="flex items-center gap-3 mb-6">
+                        <div className="bg-gradient-to-tr from-[var(--accent-blue)] to-[var(--accent-purple)] p-3 rounded-xl">
+                            <Code2 size={32} className="text-white" />
+                        </div>
+                        <div>
+                            <h1 className="text-2xl font-bold text-[var(--text-primary)]">CodeReview.ai</h1>
+                            <p className="text-sm text-[var(--text-muted)]">Intelligent Code Analysis</p>
+                        </div>
                     </div>
-                    <h2 className="text-2xl font-bold text-white mb-2">
-                        {isLogin ? 'Welcome Back' : 'Create Account'}
+
+                    <h2 className="text-3xl font-bold text-[var(--text-primary)] mb-4">
+                        Write better code,<br />
+                        <span className="bg-clip-text text-transparent bg-gradient-to-r from-[var(--accent-blue)] to-[var(--accent-purple)]">
+                            faster than ever.
+                        </span>
                     </h2>
-                    <p className="text-neutral-400 text-center text-sm">
-                        {isLogin
-                            ? 'Enter your credentials to access your dashboard'
-                            : 'Join to start reviewing code with AI assistance'}
+
+                    <p className="text-[var(--text-secondary)] mb-8">
+                        Get instant feedback on your code with AI-powered analysis. Catch bugs, security issues, and improve code quality before they become problems.
                     </p>
+
+                    <div className="space-y-4">
+                        {features.map((feature, i) => (
+                            <div key={i} className="flex items-center gap-3 text-[var(--text-secondary)]">
+                                <span className="text-xl">{feature.icon}</span>
+                                <span>{feature.text}</span>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="mt-8 p-4 bg-[var(--bg-tertiary)] rounded-xl border border-[var(--border-primary)]">
+                        <div className="flex items-center gap-2 text-[var(--accent-blue)] mb-2">
+                            <Sparkles size={16} />
+                            <span className="text-sm font-medium">Powered by Google Gemini AI</span>
+                        </div>
+                        <p className="text-xs text-[var(--text-muted)]">
+                            Advanced AI understands context, patterns, and best practices to give you actionable insights.
+                        </p>
+                    </div>
                 </div>
 
-                {error && (
-                    <div className="mb-6 p-3 rounded bg-red-500/10 border border-red-500/20 text-red-200 text-sm text-center">
-                        {error}
+                {/* Right side - Form */}
+                <div className="card p-8">
+                    <div className="md:hidden flex items-center justify-center gap-3 mb-6">
+                        <div className="bg-gradient-to-tr from-[var(--accent-blue)] to-[var(--accent-purple)] p-2 rounded-lg">
+                            <Code2 size={24} className="text-white" />
+                        </div>
+                        <span className="text-xl font-bold text-[var(--text-primary)]">CodeReview.ai</span>
                     </div>
-                )}
 
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    {!isLogin && (
-                        <div>
-                            <label className="block text-xs font-semibold text-neutral-500 uppercase mb-2">Full Name</label>
-                            <input
-                                type="text"
-                                value={name}
-                                onChange={(e) => setName(e.target.value)}
-                                className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500 transition-colors"
-                                placeholder="John Doe"
-                                required
-                            />
+                    <h2 className="text-2xl font-bold text-[var(--text-primary)] mb-2">
+                        {isLogin ? 'Welcome back' : 'Create account'}
+                    </h2>
+                    <p className="text-[var(--text-muted)] mb-6">
+                        {isLogin ? 'Sign in to continue to your dashboard' : 'Get started with free code reviews'}
+                    </p>
+
+                    {error && (
+                        <div className="mb-4 p-3 bg-[var(--accent-red)]/10 border border-[var(--accent-red)]/20 rounded-lg flex items-center gap-2 text-[var(--accent-red)] text-sm">
+                            <AlertCircle size={16} />
+                            {error}
                         </div>
                     )}
 
-                    <div>
-                        <label className="block text-xs font-semibold text-neutral-500 uppercase mb-2">Email Address</label>
-                        <div className="relative">
-                            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" size={18} />
-                            <input
-                                type="email"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                className="w-full bg-neutral-900 border border-neutral-800 rounded-lg pl-10 pr-4 py-2.5 text-white focus:outline-none focus:border-blue-500 transition-colors"
-                                placeholder="john@example.com"
-                                required
-                            />
-                        </div>
-                    </div>
-
-                    <div>
-                        <label className="block text-xs font-semibold text-neutral-500 uppercase mb-2">Password</label>
-                        <div className="relative">
-                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" size={18} />
-                            <input
-                                type="password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                className="w-full bg-neutral-900 border border-neutral-800 rounded-lg pl-10 pr-4 py-2.5 text-white focus:outline-none focus:border-blue-500 transition-colors"
-                                placeholder="••••••••"
-                                required
-                            />
-                        </div>
-                    </div>
-
-                    <button
-                        type="submit"
-                        disabled={loading}
-                        className="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium py-2.5 rounded-lg transition-all flex items-center justify-center space-x-2 mt-6 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        {loading ? (
-                            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        ) : (
-                            <>
-                                <span>{isLogin ? 'Sign In' : 'Sign Up'}</span>
-                                <ArrowRight size={18} />
-                            </>
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                        {!isLogin && (
+                            <div>
+                                <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Name</label>
+                                <div className="relative">
+                                    <User size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+                                    <input
+                                        type="text"
+                                        value={name}
+                                        onChange={(e) => setName(e.target.value)}
+                                        placeholder="Your name"
+                                        className="input pl-10"
+                                    />
+                                </div>
+                            </div>
                         )}
-                    </button>
-                </form>
 
-                <div className="mt-6 text-center">
+                        <div>
+                            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Email</label>
+                            <div className="relative">
+                                <Mail size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+                                <input
+                                    type="email"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    placeholder="you@example.com"
+                                    className="input pl-10"
+                                />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Password</label>
+                            <div className="relative">
+                                <Lock size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+                                <input
+                                    type={showPassword ? 'text' : 'password'}
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    placeholder="••••••••"
+                                    className="input pl-10 pr-10"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                                >
+                                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                </button>
+                            </div>
+                        </div>
+
+                        {isLogin && (
+                            <div className="flex justify-end">
+                                <button type="button" className="text-sm text-[var(--accent-blue)] hover:underline">
+                                    Forgot password?
+                                </button>
+                            </div>
+                        )}
+
+                        <button
+                            type="submit"
+                            disabled={loading}
+                            className="btn btn-primary w-full py-3"
+                        >
+                            {loading ? (
+                                <><Loader2 size={18} className="animate-spin" /> Processing...</>
+                            ) : (
+                                <>{isLogin ? 'Sign In' : 'Create Account'} <ArrowRight size={18} /></>
+                            )}
+                        </button>
+                    </form>
+
+                    <div className="my-6 flex items-center gap-4">
+                        <div className="flex-1 border-t border-[var(--border-primary)]"></div>
+                        <span className="text-sm text-[var(--text-muted)]">or</span>
+                        <div className="flex-1 border-t border-[var(--border-primary)]"></div>
+                    </div>
+
                     <button
-                        onClick={() => setIsLogin(!isLogin)}
-                        className="text-sm text-neutral-400 hover:text-white transition-colors"
+                        type="button"
+                        onClick={() => {/* GitHub OAuth */ }}
+                        className="btn btn-secondary w-full py-3"
                     >
-                        {isLogin ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
+                        <Github size={18} /> Continue with GitHub
                     </button>
+
+                    <p className="mt-6 text-center text-sm text-[var(--text-muted)]">
+                        {isLogin ? "Don't have an account? " : "Already have an account? "}
+                        <button
+                            type="button"
+                            onClick={() => { setIsLogin(!isLogin); setError(''); }}
+                            className="text-[var(--accent-blue)] hover:underline font-medium"
+                        >
+                            {isLogin ? 'Sign up' : 'Sign in'}
+                        </button>
+                    </p>
                 </div>
             </div>
         </div>

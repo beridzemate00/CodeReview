@@ -1,313 +1,381 @@
-import React, { useState } from 'react';
-import { Settings, Bell, Moon, Sun, Globe, Shield, Save, RotateCcw, Code2, Eye, Check } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Settings, Bell, Moon, Sun, Save, RotateCcw, Code2, Check, Key, Palette, Terminal, Webhook, GitBranch, Users, Slack, X, AlertCircle } from 'lucide-react';
 import { useSettings } from '../context/SettingsContext';
+import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 
-export const SettingsPage: React.FC = () => {
+type SettingsTab = 'general' | 'appearance' | 'editor' | 'ai' | 'notifications' | 'integrations';
+
+export function SettingsPage() {
     const { settings, updateSettings, resetSettings, saveSettings, isLoading } = useSettings();
+    const { theme, setTheme } = useTheme();
+    const { isAuthenticated, user } = useAuth();
+
+    const [activeTab, setActiveTab] = useState<SettingsTab>('general');
     const [saved, setSaved] = useState(false);
-    const [apiKeyVisible, setApiKeyVisible] = useState(false);
+    const [error, setError] = useState('');
+
+    // Local state for form fields
+    const [apiKey, setApiKey] = useState(settings.apiKey || '');
+    const [fontSize, setFontSize] = useState(settings.fontSize || 14);
+    const [slackWebhook, setSlackWebhook] = useState('');
+    const [discordWebhook, setDiscordWebhook] = useState('');
+    const [emailNotifications, setEmailNotifications] = useState(true);
+
+    useEffect(() => {
+        setApiKey(settings.apiKey || '');
+        setFontSize(settings.fontSize || 14);
+    }, [settings]);
 
     const handleSave = async () => {
-        await saveSettings();
-        setSaved(true);
-        setTimeout(() => setSaved(false), 2000);
+        try {
+            updateSettings({
+                apiKey,
+                fontSize,
+                theme: theme as 'dark' | 'light'
+            });
+            await saveSettings();
+            setSaved(true);
+            setTimeout(() => setSaved(false), 3000);
+        } catch (err) {
+            setError('Failed to save settings');
+        }
     };
 
-    const languages = [
-        { value: 'en', label: 'English' },
-        { value: 'es', label: 'Spanish' },
-        { value: 'fr', label: 'French' },
-        { value: 'de', label: 'German' },
-        { value: 'ka', label: 'Georgian' },
+    const handleReset = () => {
+        if (confirm('Reset all settings to defaults?')) {
+            resetSettings();
+            setApiKey('');
+            setFontSize(14);
+            setTheme('dark');
+        }
+    };
+
+    const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
+        { id: 'general', label: 'General', icon: <Settings size={18} /> },
+        { id: 'appearance', label: 'Appearance', icon: <Palette size={18} /> },
+        { id: 'editor', label: 'Editor', icon: <Code2 size={18} /> },
+        { id: 'ai', label: 'AI Configuration', icon: <Terminal size={18} /> },
+        { id: 'notifications', label: 'Notifications', icon: <Bell size={18} /> },
+        { id: 'integrations', label: 'Integrations', icon: <Webhook size={18} /> }
     ];
 
-    const programmingLanguages = [
-        'javascript', 'typescript', 'python', 'java', 'go', 'rust', 'cpp', 'csharp', 'ruby', 'php', 'swift', 'kotlin'
-    ];
+    const SettingRow = ({ label, description, children }: { label: string; description?: string; children: React.ReactNode }) => (
+        <div className="flex items-start justify-between py-4 border-b border-[var(--border-primary)] last:border-0">
+            <div className="flex-1 mr-4">
+                <p className="font-medium text-[var(--text-primary)]">{label}</p>
+                {description && <p className="text-sm text-[var(--text-muted)] mt-0.5">{description}</p>}
+            </div>
+            <div className="flex-shrink-0">{children}</div>
+        </div>
+    );
+
+    const Toggle = ({ enabled, onChange }: { enabled: boolean; onChange: () => void }) => (
+        <button
+            onClick={onChange}
+            className={`w-11 h-6 rounded-full transition-colors relative ${enabled ? 'bg-[var(--accent-blue)]' : 'bg-[var(--bg-tertiary)]'}`}
+        >
+            <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${enabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+        </button>
+    );
 
     return (
-        <div className="p-8 max-w-4xl mx-auto animate-fade-in">
-            <header className="mb-8">
-                <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
-                    <Settings className="text-blue-500" />
-                    Settings
-                </h1>
-                <p className="text-neutral-400">Manage your preferences and application configuration.</p>
-            </header>
-
-            <div className="space-y-6">
-                {/* Visual Settings */}
-                <section className="bg-[#1a1a1a] rounded-xl border border-neutral-800 p-6">
-                    <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
-                        <Sun className="text-yellow-500" size={20} />
-                        Appearance
-                    </h2>
-                    <div className="space-y-4">
-                        <div className="flex items-center justify-between py-4 border-b border-neutral-800/50">
-                            <div>
-                                <p className="text-neutral-200 font-medium">Theme Mode</p>
-                                <p className="text-sm text-neutral-500">Select your preferred interface theme</p>
-                            </div>
-                            <div className="flex bg-neutral-800 rounded-lg p-1">
-                                <button
-                                    onClick={() => updateSettings({ theme: 'light' })}
-                                    className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${settings.theme === 'light' ? 'bg-white text-black shadow-sm' : 'text-neutral-400 hover:text-white'
-                                        }`}
-                                >
-                                    <Sun size={16} className="inline mr-2" />
-                                    Light
-                                </button>
-                                <button
-                                    onClick={() => updateSettings({ theme: 'dark' })}
-                                    className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${settings.theme === 'dark' ? 'bg-neutral-700 text-white shadow-sm' : 'text-neutral-400 hover:text-white'
-                                        }`}
-                                >
-                                    <Moon size={16} className="inline mr-2" />
-                                    Dark
-                                </button>
-                            </div>
-                        </div>
-
-                        <div className="flex items-center justify-between py-4 border-b border-neutral-800/50">
-                            <div>
-                                <p className="text-neutral-200 font-medium">Font Size</p>
-                                <p className="text-sm text-neutral-500">Editor font size in pixels</p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <button
-                                    onClick={() => updateSettings({ fontSize: Math.max(10, settings.fontSize - 1) })}
-                                    className="w-8 h-8 bg-neutral-800 rounded text-white hover:bg-neutral-700"
-                                >-</button>
-                                <span className="w-12 text-center text-white font-mono">{settings.fontSize}px</span>
-                                <button
-                                    onClick={() => updateSettings({ fontSize: Math.min(24, settings.fontSize + 1) })}
-                                    className="w-8 h-8 bg-neutral-800 rounded text-white hover:bg-neutral-700"
-                                >+</button>
-                            </div>
-                        </div>
-
-                        <div className="flex items-center justify-between py-4">
-                            <div>
-                                <p className="text-neutral-200 font-medium">Show Line Numbers</p>
-                                <p className="text-sm text-neutral-500">Display line numbers in the code editor</p>
-                            </div>
-                            <label className="relative inline-flex items-center cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    checked={settings.showLineNumbers}
-                                    onChange={(e) => updateSettings({ showLineNumbers: e.target.checked })}
-                                    className="sr-only peer"
-                                />
-                                <div className="w-11 h-6 bg-neutral-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                            </label>
-                        </div>
-                    </div>
-                </section>
-
-                {/* Code Analysis Settings */}
-                <section className="bg-[#1a1a1a] rounded-xl border border-neutral-800 p-6">
-                    <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
-                        <Code2 className="text-green-500" size={20} />
-                        Code Analysis
-                    </h2>
-                    <div className="space-y-4">
-                        <div className="flex items-center justify-between py-4 border-b border-neutral-800/50">
-                            <div>
-                                <p className="text-neutral-200 font-medium">Default Language</p>
-                                <p className="text-sm text-neutral-500">Default programming language for analysis</p>
-                            </div>
-                            <select
-                                value={settings.defaultLanguage}
-                                onChange={(e) => updateSettings({ defaultLanguage: e.target.value })}
-                                className="bg-neutral-900 border border-neutral-700 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none capitalize"
-                            >
-                                {programmingLanguages.map(lang => (
-                                    <option key={lang} value={lang} className="capitalize">{lang}</option>
-                                ))}
-                            </select>
-                        </div>
-
-                        <div className="py-4 border-b border-neutral-800/50">
-                            <div className="flex items-center justify-between mb-3">
-                                <div>
-                                    <p className="text-neutral-200 font-medium">Severity Filters</p>
-                                    <p className="text-sm text-neutral-500">Which issue severities to show</p>
-                                </div>
-                            </div>
-                            <div className="flex gap-3">
-                                {(['high', 'medium', 'low'] as const).map(severity => (
-                                    <button
-                                        key={severity}
-                                        onClick={() => {
-                                            const current = settings.severityFilter;
-                                            const updated = current.includes(severity)
-                                                ? current.filter(s => s !== severity)
-                                                : [...current, severity];
-                                            updateSettings({ severityFilter: updated });
-                                        }}
-                                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all capitalize ${settings.severityFilter.includes(severity)
-                                            ? severity === 'high' ? 'bg-red-600 text-white'
-                                                : severity === 'medium' ? 'bg-yellow-600 text-white'
-                                                    : 'bg-blue-600 text-white'
-                                            : 'bg-neutral-800 text-neutral-400'
-                                            }`}
-                                    >
-                                        {severity}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        <div className="flex items-center justify-between py-4">
-                            <div>
-                                <p className="text-neutral-200 font-medium">Enable AI Suggestions</p>
-                                <p className="text-sm text-neutral-500">Use ML algorithms for enhanced analysis</p>
-                            </div>
-                            <label className="relative inline-flex items-center cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    checked={settings.enableAI}
-                                    onChange={(e) => updateSettings({ enableAI: e.target.checked })}
-                                    className="sr-only peer"
-                                />
-                                <div className="w-11 h-6 bg-neutral-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                            </label>
-                        </div>
-                    </div>
-                </section>
-
-                {/* Notifications */}
-                <section className="bg-[#1a1a1a] rounded-xl border border-neutral-800 p-6">
-                    <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
-                        <Bell className="text-red-500" size={20} />
-                        Notifications
-                    </h2>
-                    <div className="space-y-4">
-                        <div className="flex items-center justify-between py-4 border-b border-neutral-800/50">
-                            <div>
-                                <p className="text-neutral-200 font-medium">Enable Notifications</p>
-                                <p className="text-sm text-neutral-500">Receive updates about your code reviews</p>
-                            </div>
-                            <label className="relative inline-flex items-center cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    checked={settings.notifications}
-                                    onChange={(e) => updateSettings({ notifications: e.target.checked })}
-                                    className="sr-only peer"
-                                />
-                                <div className="w-11 h-6 bg-neutral-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                            </label>
-                        </div>
-
-                        <div className="flex items-center justify-between py-4">
-                            <div>
-                                <p className="text-neutral-200 font-medium">Auto-Save Reviews</p>
-                                <p className="text-sm text-neutral-500">Automatically save reviews to history</p>
-                            </div>
-                            <label className="relative inline-flex items-center cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    checked={settings.autoSave}
-                                    onChange={(e) => updateSettings({ autoSave: e.target.checked })}
-                                    className="sr-only peer"
-                                />
-                                <div className="w-11 h-6 bg-neutral-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                            </label>
-                        </div>
-                    </div>
-                </section>
-
-                {/* General */}
-                <section className="bg-[#1a1a1a] rounded-xl border border-neutral-800 p-6">
-                    <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
-                        <Globe className="text-green-500" size={20} />
-                        General
-                    </h2>
-                    <div>
-                        <label className="block text-sm font-medium text-neutral-400 mb-2">Language</label>
-                        <select
-                            value={settings.language}
-                            onChange={(e) => updateSettings({ language: e.target.value })}
-                            className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
-                        >
-                            {languages.map(lang => (
-                                <option key={lang.value} value={lang.value}>{lang.label}</option>
-                            ))}
-                        </select>
-                    </div>
-                </section>
-
-                {/* Security */}
-                <section className="bg-[#1a1a1a] rounded-xl border border-neutral-800 p-6">
-                    <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
-                        <Shield className="text-purple-500" size={20} />
-                        AI Configuration
-                    </h2>
-                    <div className="space-y-4">
-                        <div>
-                            <label className="block text-sm font-medium text-neutral-400 mb-2">
-                                Gemini API Key
-                                {settings.apiKey && <span className="ml-2 text-green-500">✓ Configured</span>}
-                            </label>
-                            <div className="relative">
-                                <input
-                                    type={apiKeyVisible ? 'text' : 'password'}
-                                    value={settings.apiKey}
-                                    onChange={(e) => updateSettings({ apiKey: e.target.value })}
-                                    placeholder="Enter your Gemini API key..."
-                                    className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-4 py-2 pr-12 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all font-mono"
-                                />
-                                <button
-                                    onClick={() => setApiKeyVisible(!apiKeyVisible)}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white"
-                                >
-                                    <Eye size={18} />
-                                </button>
-                            </div>
-                            <p className="text-xs text-neutral-500 mt-2">
-                                Get your API key from{' '}
-                                <a href="https://aistudio.google.com" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">
-                                    Google AI Studio
-                                </a>
-                                . Your key is stored locally and enables Gemini 2.5 Flash AI-powered code reviews.
-                            </p>
-                        </div>
-                    </div>
-                </section>
-
-                {/* Actions */}
-                <div className="flex items-center justify-between pt-4">
-                    <button
-                        onClick={resetSettings}
-                        className="flex items-center gap-2 px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-white rounded-lg font-medium transition-colors"
-                    >
-                        <RotateCcw size={18} />
-                        Reset to Defaults
+        <div className="animate-fadeIn max-w-4xl mx-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-8">
+                <div>
+                    <h1 className="text-2xl md:text-3xl font-bold text-[var(--text-primary)] mb-2">Settings</h1>
+                    <p className="text-[var(--text-secondary)]">Customize your experience</p>
+                </div>
+                <div className="flex gap-2">
+                    <button onClick={handleReset} className="btn btn-ghost">
+                        <RotateCcw size={18} /> Reset
                     </button>
-                    <button
-                        onClick={handleSave}
-                        disabled={isLoading}
-                        className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors shadow-lg shadow-blue-600/20 disabled:opacity-50"
-                    >
-                        {saved ? (
-                            <>
-                                <Check size={18} />
-                                Saved!
-                            </>
-                        ) : isLoading ? (
-                            <>
-                                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                Saving...
-                            </>
-                        ) : (
-                            <>
-                                <Save size={18} />
-                                Save Changes
-                            </>
-                        )}
+                    <button onClick={handleSave} disabled={isLoading} className="btn btn-primary">
+                        {saved ? <><Check size={18} /> Saved</> : isLoading ? 'Saving...' : <><Save size={18} /> Save</>}
                     </button>
                 </div>
             </div>
+
+            {error && (
+                <div className="mb-4 p-3 bg-[var(--accent-red)]/10 border border-[var(--accent-red)]/20 rounded-lg text-[var(--accent-red)] flex items-center gap-2">
+                    <AlertCircle size={18} />
+                    {error}
+                    <button onClick={() => setError('')} className="ml-auto"><X size={16} /></button>
+                </div>
+            )}
+
+            <div className="flex flex-col md:flex-row gap-6">
+                {/* Tabs */}
+                <div className="md:w-48 flex md:flex-col gap-1 overflow-x-auto md:overflow-visible pb-2 md:pb-0">
+                    {tabs.map(tab => (
+                        <button
+                            key={tab.id}
+                            onClick={() => setActiveTab(tab.id)}
+                            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm whitespace-nowrap transition-colors ${activeTab === tab.id
+                                ? 'bg-[var(--accent-blue)] text-white'
+                                : 'text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'
+                                }`}
+                        >
+                            {tab.icon}
+                            {tab.label}
+                        </button>
+                    ))}
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 card p-6">
+                    {/* General Tab */}
+                    {activeTab === 'general' && (
+                        <div>
+                            <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-4">General Settings</h2>
+                            <SettingRow label="Language" description="Interface language">
+                                <select
+                                    value={settings.language}
+                                    onChange={e => updateSettings({ language: e.target.value })}
+                                    className="input py-1.5 w-auto"
+                                >
+                                    <option value="en">English</option>
+                                    <option value="es">Español</option>
+                                    <option value="fr">Français</option>
+                                    <option value="de">Deutsch</option>
+                                </select>
+                            </SettingRow>
+                            <SettingRow label="Default Programming Language" description="Used when creating new reviews">
+                                <select
+                                    value={settings.defaultLanguage}
+                                    onChange={e => updateSettings({ defaultLanguage: e.target.value })}
+                                    className="input py-1.5 w-auto"
+                                >
+                                    <option value="typescript">TypeScript</option>
+                                    <option value="javascript">JavaScript</option>
+                                    <option value="python">Python</option>
+                                    <option value="java">Java</option>
+                                    <option value="go">Go</option>
+                                    <option value="rust">Rust</option>
+                                </select>
+                            </SettingRow>
+                            <SettingRow label="Auto-save" description="Automatically save settings changes">
+                                <Toggle enabled={settings.autoSave} onChange={() => updateSettings({ autoSave: !settings.autoSave })} />
+                            </SettingRow>
+                        </div>
+                    )}
+
+                    {/* Appearance Tab */}
+                    {activeTab === 'appearance' && (
+                        <div>
+                            <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-4">Appearance</h2>
+                            <SettingRow label="Theme" description="Choose your preferred color scheme">
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => setTheme('dark')}
+                                        className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${theme === 'dark' ? 'border-[var(--accent-blue)] bg-[var(--accent-blue)]/10' : 'border-[var(--border-primary)]'
+                                            }`}
+                                    >
+                                        <Moon size={16} /> Dark
+                                    </button>
+                                    <button
+                                        onClick={() => setTheme('light')}
+                                        className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${theme === 'light' ? 'border-[var(--accent-blue)] bg-[var(--accent-blue)]/10' : 'border-[var(--border-primary)]'
+                                            }`}
+                                    >
+                                        <Sun size={16} /> Light
+                                    </button>
+                                </div>
+                            </SettingRow>
+                        </div>
+                    )}
+
+                    {/* Editor Tab */}
+                    {activeTab === 'editor' && (
+                        <div>
+                            <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-4">Editor Settings</h2>
+                            <SettingRow label="Font Size" description="Code editor font size">
+                                <div className="flex items-center gap-3">
+                                    <input
+                                        type="range"
+                                        min="10"
+                                        max="24"
+                                        value={fontSize}
+                                        onChange={e => setFontSize(parseInt(e.target.value))}
+                                        className="w-24"
+                                    />
+                                    <span className="text-[var(--text-primary)] font-mono w-8">{fontSize}px</span>
+                                </div>
+                            </SettingRow>
+                            <SettingRow label="Line Numbers" description="Show line numbers in editor">
+                                <Toggle
+                                    enabled={settings.showLineNumbers}
+                                    onChange={() => updateSettings({ showLineNumbers: !settings.showLineNumbers })}
+                                />
+                            </SettingRow>
+                        </div>
+                    )}
+
+                    {/* AI Tab */}
+                    {activeTab === 'ai' && (
+                        <div>
+                            <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-4">AI Configuration</h2>
+                            <SettingRow label="Enable AI Analysis" description="Use Google Gemini for intelligent code review">
+                                <Toggle
+                                    enabled={settings.enableAI}
+                                    onChange={() => updateSettings({ enableAI: !settings.enableAI })}
+                                />
+                            </SettingRow>
+                            <SettingRow label="Gemini API Key" description="Your Google Gemini API key for AI-powered analysis">
+                                <div className="w-full max-w-xs">
+                                    <div className="relative">
+                                        <Key size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+                                        <input
+                                            type="password"
+                                            value={apiKey}
+                                            onChange={e => setApiKey(e.target.value)}
+                                            placeholder="AIza..."
+                                            className="input pl-10 w-full"
+                                        />
+                                    </div>
+                                    <a
+                                        href="https://aistudio.google.com/apikey"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-xs text-[var(--accent-blue)] hover:underline mt-1 inline-block"
+                                    >
+                                        Get your API key from Google AI Studio →
+                                    </a>
+                                </div>
+                            </SettingRow>
+                            <div className="mt-4 p-4 bg-[var(--bg-tertiary)] rounded-lg">
+                                <h3 className="font-medium text-[var(--text-primary)] mb-2">About AI Analysis</h3>
+                                <p className="text-sm text-[var(--text-muted)]">
+                                    AI analysis uses Google Gemini to provide intelligent code insights including:
+                                </p>
+                                <ul className="text-sm text-[var(--text-muted)] mt-2 space-y-1">
+                                    <li>• Deep code understanding and context-aware suggestions</li>
+                                    <li>• Security vulnerability detection</li>
+                                    <li>• Performance optimization recommendations</li>
+                                    <li>• Best practices and code style improvements</li>
+                                </ul>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Notifications Tab */}
+                    {activeTab === 'notifications' && (
+                        <div>
+                            <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-4">Notifications</h2>
+                            <SettingRow label="In-app Notifications" description="Show notifications in the app">
+                                <Toggle
+                                    enabled={settings.notifications}
+                                    onChange={() => updateSettings({ notifications: !settings.notifications })}
+                                />
+                            </SettingRow>
+                            <SettingRow label="Email Notifications" description="Receive email updates for reviews">
+                                <Toggle enabled={emailNotifications} onChange={() => setEmailNotifications(!emailNotifications)} />
+                            </SettingRow>
+                            <h3 className="font-medium text-[var(--text-primary)] mt-6 mb-3">Notification Types</h3>
+                            <div className="space-y-3">
+                                <label className="flex items-center gap-3 cursor-pointer">
+                                    <input type="checkbox" defaultChecked className="w-4 h-4 accent-[var(--accent-blue)]" />
+                                    <span className="text-sm text-[var(--text-primary)]">Review completed</span>
+                                </label>
+                                <label className="flex items-center gap-3 cursor-pointer">
+                                    <input type="checkbox" defaultChecked className="w-4 h-4 accent-[var(--accent-blue)]" />
+                                    <span className="text-sm text-[var(--text-primary)]">Team invitations</span>
+                                </label>
+                                <label className="flex items-center gap-3 cursor-pointer">
+                                    <input type="checkbox" defaultChecked className="w-4 h-4 accent-[var(--accent-blue)]" />
+                                    <span className="text-sm text-[var(--text-primary)]">Comments on your reviews</span>
+                                </label>
+                                <label className="flex items-center gap-3 cursor-pointer">
+                                    <input type="checkbox" className="w-4 h-4 accent-[var(--accent-blue)]" />
+                                    <span className="text-sm text-[var(--text-primary)]">Weekly summary</span>
+                                </label>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Integrations Tab */}
+                    {activeTab === 'integrations' && (
+                        <div>
+                            <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-4">Integrations</h2>
+
+                            {/* GitHub */}
+                            <div className="p-4 border border-[var(--border-primary)] rounded-lg mb-4">
+                                <div className="flex items-center gap-3 mb-3">
+                                    <GitBranch size={24} className="text-[var(--text-primary)]" />
+                                    <div>
+                                        <h3 className="font-medium text-[var(--text-primary)]">GitHub</h3>
+                                        <p className="text-xs text-[var(--text-muted)]">Review pull requests and integrate with repos</p>
+                                    </div>
+                                </div>
+                                <button onClick={() => window.location.href = '/github'} className="btn btn-secondary text-sm w-full">
+                                    Configure GitHub
+                                </button>
+                            </div>
+
+                            {/* Slack */}
+                            <div className="p-4 border border-[var(--border-primary)] rounded-lg mb-4">
+                                <div className="flex items-center gap-3 mb-3">
+                                    <Slack size={24} className="text-[#4A154B]" />
+                                    <div>
+                                        <h3 className="font-medium text-[var(--text-primary)]">Slack</h3>
+                                        <p className="text-xs text-[var(--text-muted)]">Get notifications in Slack</p>
+                                    </div>
+                                </div>
+                                <input
+                                    type="text"
+                                    value={slackWebhook}
+                                    onChange={e => setSlackWebhook(e.target.value)}
+                                    placeholder="Webhook URL"
+                                    className="input mb-2"
+                                />
+                                <button className="btn btn-secondary text-sm w-full" disabled={!slackWebhook}>
+                                    Save Webhook
+                                </button>
+                            </div>
+
+                            {/* Discord */}
+                            <div className="p-4 border border-[var(--border-primary)] rounded-lg">
+                                <div className="flex items-center gap-3 mb-3">
+                                    <div className="w-6 h-6 bg-[#5865F2] rounded flex items-center justify-center text-white text-xs font-bold">D</div>
+                                    <div>
+                                        <h3 className="font-medium text-[var(--text-primary)]">Discord</h3>
+                                        <p className="text-xs text-[var(--text-muted)]">Get notifications in Discord</p>
+                                    </div>
+                                </div>
+                                <input
+                                    type="text"
+                                    value={discordWebhook}
+                                    onChange={e => setDiscordWebhook(e.target.value)}
+                                    placeholder="Webhook URL"
+                                    className="input mb-2"
+                                />
+                                <button className="btn btn-secondary text-sm w-full" disabled={!discordWebhook}>
+                                    Save Webhook
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* Profile Section (if authenticated) */}
+            {isAuthenticated && user && (
+                <div className="card p-6 mt-6">
+                    <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-4 flex items-center gap-2">
+                        <Users size={20} /> Profile
+                    </h2>
+                    <div className="flex items-center gap-4">
+                        <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-[var(--accent-blue)] to-[var(--accent-purple)] flex items-center justify-center text-2xl font-bold text-white">
+                            {user.name?.charAt(0) || user.email.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                            <p className="text-lg font-medium text-[var(--text-primary)]">{user.name || 'User'}</p>
+                            <p className="text-sm text-[var(--text-muted)]">{user.email}</p>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
-};
+}

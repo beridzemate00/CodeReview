@@ -6,6 +6,9 @@ import { SettingsPage } from './pages/SettingsPage';
 import { HistoryPage } from './pages/HistoryPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { ProjectsPage } from './pages/ProjectsPage';
+import { TeamsPage } from './pages/TeamsPage';
+import { SnippetsPage } from './pages/SnippetsPage';
+import { GitHubPage } from './pages/GitHubPage';
 
 function App() {
   return (
@@ -16,6 +19,9 @@ function App() {
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/history" element={<HistoryPage />} />
         <Route path="/projects" element={<ProjectsPage />} />
+        <Route path="/teams" element={<TeamsPage />} />
+        <Route path="/snippets" element={<SnippetsPage />} />
+        <Route path="/github" element={<GitHubPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />

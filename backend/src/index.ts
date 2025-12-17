@@ -6,6 +6,12 @@ import { Server } from 'socket.io';
 import authRoutes from './routes/authRoutes';
 import reviewRoutes from './routes/reviewRoutes';
 import userRoutes from './routes/userRoutes';
+import projectRoutes from './routes/projectRoutes';
+import teamRoutes from './routes/teamRoutes';
+import snippetRoutes from './routes/snippetRoutes';
+import notificationRoutes from './routes/notificationRoutes';
+import githubRoutes from './routes/githubRoutes';
+import uploadRoutes from './routes/uploadRoutes';
 
 dotenv.config();
 
@@ -72,6 +78,21 @@ io.on('connection', (socket) => {
         }
     });
 
+    // Handle notification events
+    socket.on('newNotification', (data: { userId: string; notification: any }) => {
+        // Send to specific user's sockets
+        connectedUsers.forEach((user, socketId) => {
+            if (user.userId === data.userId) {
+                io.to(socketId).emit('notification', data.notification);
+            }
+        });
+    });
+
+    // Handle team updates
+    socket.on('teamUpdate', (data: { teamId: string; action: string; payload: any }) => {
+        io.emit(`team:${data.teamId}`, { action: data.action, payload: data.payload });
+    });
+
     socket.on('disconnect', () => {
         connectedUsers.delete(socket.id);
         console.log('Client disconnected:', socket.id);
@@ -87,7 +108,8 @@ app.use(cors({
     origin: ['http://localhost:5173', 'http://localhost:80', 'http://localhost'],
     credentials: true,
 }));
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Health check endpoint for Docker
 app.get('/health', (req: Request, res: Response) => {
@@ -103,20 +125,37 @@ app.get('/health', (req: Request, res: Response) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/review', reviewRoutes);
 app.use('/api/user', userRoutes);
+app.use('/api/projects', projectRoutes);
+app.use('/api/teams', teamRoutes);
+app.use('/api/snippets', snippetRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/github', githubRoutes);
+app.use('/api/upload', uploadRoutes);
 
 // Root endpoint
 app.get('/', (req: Request, res: Response) => {
     res.json({
         name: 'AI Code Review Assistant API',
-        version: '1.0.0',
+        version: '2.0.0',
         status: 'running',
         features: {
             websocket: 'Socket.io enabled',
             connectedClients: connectedUsers.size,
+            github: 'GitHub integration',
+            teams: 'Team collaboration',
+            snippets: 'Code snippets library',
+            upload: 'File upload support',
+            notifications: 'Real-time notifications'
         },
         endpoints: {
             auth: '/api/auth',
             review: '/api/review',
+            projects: '/api/projects',
+            teams: '/api/teams',
+            snippets: '/api/snippets',
+            notifications: '/api/notifications',
+            github: '/api/github',
+            upload: '/api/upload',
             health: '/health',
             websocket: 'ws://localhost:' + port,
         }
@@ -129,8 +168,9 @@ app.use((req: Request, res: Response) => {
 });
 
 httpServer.listen(port, () => {
-    console.log(`Server is running on port ${port}`);
-    console.log(`WebSocket server is ready`);
+    console.log(`🚀 Server is running on port ${port}`);
+    console.log(`📡 WebSocket server is ready`);
+    console.log(`📋 API Version 2.0.0 with enhanced features`);
 });
 
 export { io };

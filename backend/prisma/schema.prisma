@@ -8,42 +8,175 @@ datasource db {
 }
 
 model User {
-  id        String    @id @default(uuid())
-  email     String    @unique
-  password  String
-  name      String?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  projects  Project[]
-  reviews   Review[]
+  id              String           @id @default(uuid())
+  email           String           @unique
+  password        String
+  name            String?
+  avatar          String?
+  role            String           @default("user") // user, admin
+  githubId        String?          @unique
+  githubToken     String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  projects        Project[]
+  reviews         Review[]
+  snippets        CodeSnippet[]
+  notifications   Notification[]
+  teamMemberships TeamMember[]
+  reviewComments  ReviewComment[]
+  settings        UserSettings?
+}
+
+model UserSettings {
+  id                String   @id @default(uuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  theme             String   @default("dark")
+  notifications     Boolean  @default(true)
+  emailNotifications Boolean @default(true)
+  slackWebhook      String?
+  discordWebhook    String?
+  autoSave          Boolean  @default(true)
+  showLineNumbers   Boolean  @default(true)
+  fontSize          Int      @default(14)
+  defaultLanguage   String   @default("typescript")
+  severityFilter    String   @default("[\"high\",\"medium\",\"low\"]") // JSON array
+  enableAI          Boolean  @default(true)
+  geminiApiKey      String?
+  // Custom rule configurations
+  customRules       String?  // JSON string of custom rules
+  disabledRules     String?  // JSON array of disabled rule IDs
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model Team {
+  id          String       @id @default(uuid())
+  name        String
+  description String?
+  avatar      String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  members     TeamMember[]
+  projects    Project[]
+}
+
+model TeamMember {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  teamId    String
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  role      String   @default("member") // owner, admin, member, viewer
+  createdAt DateTime @default(now())
+
+  @@unique([userId, teamId])
 }
 
 model Project {
-  id        String   @id @default(uuid())
-  name      String
-  repoUrl   String?
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  reviews   Review[]
-  createdAt DateTime @default(now())
+  id           String      @id @default(uuid())
+  name         String
+  description  String?
+  repoUrl      String?
+  githubOwner  String?
+  githubRepo   String?
+  language     String      @default("typescript")
+  userId       String
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  teamId       String?
+  team         Team?       @relation(fields: [teamId], references: [id])
+  reviews      Review[]
+  customRules  String?     // JSON string of project-specific rules
+  webhookSecret String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
 }
 
 model Review {
-  id            String   @id @default(uuid())
-  content       String   // JSON string of the review comments
-  codeSnippet   String?  // Stored code snippet (truncated for display)
-  language      String   @default("typescript")
-  fileName      String   @default("untitled")
-  linesOfCode   Int      @default(0)
-  issueCount    Int      @default(0)
-  highSeverity  Int      @default(0)
-  mediumSeverity Int     @default(0)
-  lowSeverity   Int      @default(0)
-  qualityScore  Float    @default(100.0)  // ML-derived quality score
-  complexity    Float    @default(0.0)    // Cyclomatic complexity estimate
-  projectId     String?
-  project       Project? @relation(fields: [projectId], references: [id])
-  userId        String?
-  user          User?    @relation(fields: [userId], references: [id])
-  createdAt     DateTime @default(now())
+  id              String          @id @default(uuid())
+  content         String          // JSON string of the review comments
+  codeSnippet     String?         // Stored code snippet (truncated for display)
+  fullCode        String?         // Full code for diff comparison
+  language        String          @default("typescript")
+  fileName        String          @default("untitled")
+  filePath        String?         // Full file path if from upload
+  linesOfCode     Int             @default(0)
+  issueCount      Int             @default(0)
+  highSeverity    Int             @default(0)
+  mediumSeverity  Int             @default(0)
+  lowSeverity     Int             @default(0)
+  qualityScore    Float           @default(100.0)
+  readabilityScore Float          @default(0)
+  maintainabilityScore Float      @default(0)
+  securityScore   Float           @default(0)
+  performanceScore Float          @default(0)
+  complexity      Float           @default(0.0)
+  predictedBugRisk Float          @default(0)
+  // Source info
+  sourceType      String          @default("paste") // paste, upload, github_pr
+  pullRequestId   String?
+  pullRequestUrl  String?
+  commitSha       String?
+  // Relations
+  projectId       String?
+  project         Project?        @relation(fields: [projectId], references: [id])
+  userId          String?
+  user            User?           @relation(fields: [userId], references: [id])
+  comments        ReviewComment[]
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+}
+
+model ReviewComment {
+  id        String   @id @default(uuid())
+  reviewId  String
+  review    Review   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  content   String
+  line      Int?     // Optional line number reference
+  resolved  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CodeSnippet {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  code        String
+  language    String   @default("typescript")
+  tags        String?  // JSON array of tags
+  isPublic    Boolean  @default(false)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String   // review_completed, team_invite, comment, mention
+  title     String
+  message   String
+  link      String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model CustomRule {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  pattern     String   // Regex pattern
+  message     String
+  severity    String   @default("medium") // high, medium, low
+  type        String   @default("refactor") // bug, security, performance, refactor, style
+  language    String?  // null means all languages
+  enabled     Boolean  @default(true)
+  isGlobal    Boolean  @default(false) // System-wide rule
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }

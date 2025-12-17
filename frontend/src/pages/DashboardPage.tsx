@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { LayoutDashboard, TrendingUp, AlertTriangle, CheckCircle, Code2, FileCode, BarChart3, RefreshCw } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { LayoutDashboard, TrendingUp, AlertTriangle, CheckCircle, Code2, FileCode, BarChart3, RefreshCw, Zap, Shield, Bug, BookOpen } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
@@ -27,260 +27,310 @@ const defaultStats: DashboardStats = {
     trendData: [],
 };
 
-export const DashboardPage: React.FC = () => {
-    const [stats, setStats] = useState<DashboardStats>(defaultStats);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+export function DashboardPage() {
     const navigate = useNavigate();
     const { isAuthenticated } = useAuth();
 
+    const [stats, setStats] = useState<DashboardStats>(defaultStats);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+    const [refreshing, setRefreshing] = useState(false);
+
     useEffect(() => {
-        if (!isAuthenticated) {
-            navigate('/login');
-            return;
+        if (isAuthenticated) {
+            fetchStats();
+        } else {
+            setLoading(false);
         }
-        fetchStats();
-    }, [isAuthenticated, navigate]);
+    }, [isAuthenticated]);
 
     const fetchStats = async () => {
-        setLoading(true);
-        setError(null);
-
         try {
-            const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
             const token = localStorage.getItem('token');
-
-            if (!token) {
-                setStats(defaultStats);
-                setLoading(false);
-                return;
-            }
-
+            const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
             const response = await fetch(`${apiUrl}/api/review/stats`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                },
+                headers: { 'Authorization': `Bearer ${token}` }
             });
 
-            if (response.status === 401 || response.status === 403) {
-                // Token expired or invalid - show empty state instead of redirecting
-                setStats(defaultStats);
-                setLoading(false);
-                return;
+            if (response.ok) {
+                const data = await response.json();
+                setStats(data);
+            } else if (response.status === 403 || response.status === 401) {
+                setError('Please sign in to view your dashboard');
             }
-
-            if (!response.ok) {
-                throw new Error('Failed to fetch stats');
-            }
-
-            const data = await response.json();
-            setStats(data);
-        } catch (err) {
-            console.error('Failed to fetch stats:', err);
+        } catch (err: any) {
             setError('Failed to load dashboard data');
-            setStats(defaultStats);
         } finally {
             setLoading(false);
+            setRefreshing(false);
         }
     };
 
-    const getScoreColor = (score: number) => {
+    const handleRefresh = () => {
+        setRefreshing(true);
+        fetchStats();
+    };
+
+    const getScoreColor = (score: number): string => {
         if (score >= 80) return 'text-green-500';
         if (score >= 60) return 'text-yellow-500';
         return 'text-red-500';
     };
 
-    const getScoreGradient = (score: number) => {
-        if (score >= 80) return 'from-green-500 to-emerald-600';
+    const getScoreGradient = (score: number): string => {
+        if (score >= 80) return 'from-green-500 to-emerald-500';
         if (score >= 60) return 'from-yellow-500 to-orange-500';
-        return 'from-blue-500 to-indigo-600';
+        return 'from-red-500 to-rose-500';
     };
+
+    const getLanguageColor = (lang: string): string => {
+        const colors: Record<string, string> = {
+            typescript: 'bg-blue-500',
+            javascript: 'bg-yellow-500',
+            python: 'bg-green-500',
+            java: 'bg-orange-500',
+            go: 'bg-cyan-500',
+            rust: 'bg-orange-600',
+            cpp: 'bg-purple-500',
+            ruby: 'bg-red-500',
+            php: 'bg-indigo-500'
+        };
+        return colors[lang] || 'bg-gray-500';
+    };
+
+    const totalLanguages = Object.values(stats.languageBreakdown).reduce((a, b) => a + b, 0);
+
+    if (!isAuthenticated) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
+                <LayoutDashboard size={48} className="text-[var(--text-muted)] mb-4" />
+                <h2 className="text-xl font-semibold text-[var(--text-primary)] mb-2">Sign in to view your dashboard</h2>
+                <p className="text-[var(--text-muted)] mb-4">Track your code review history and statistics</p>
+                <button onClick={() => navigate('/login')} className="btn btn-primary">
+                    Sign In
+                </button>
+            </div>
+        );
+    }
 
     if (loading) {
         return (
-            <div className="p-8 max-w-7xl mx-auto animate-fade-in">
-                <header className="mb-8">
-                    <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
-                        <LayoutDashboard className="text-blue-500" />
-                        Dashboard
-                    </h1>
-                    <p className="text-neutral-400">Loading your activity overview...</p>
-                </header>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                    {[1, 2, 3, 4].map((i) => (
-                        <div key={i} className="bg-[#1a1a1a] rounded-xl border border-neutral-800 p-6 animate-pulse">
-                            <div className="h-4 bg-neutral-800 rounded w-1/2 mb-4"></div>
-                            <div className="h-8 bg-neutral-800 rounded w-1/3"></div>
-                        </div>
-                    ))}
-                </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {[1, 2, 3, 4].map(i => (
+                    <div key={i} className="card p-6">
+                        <div className="skeleton h-4 w-20 rounded mb-3"></div>
+                        <div className="skeleton h-8 w-16 rounded"></div>
+                    </div>
+                ))}
             </div>
         );
     }
 
     return (
-        <div className="p-8 max-w-7xl mx-auto animate-fade-in">
-            <header className="mb-8">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
-                            <LayoutDashboard className="text-blue-500" />
-                            Dashboard
-                        </h1>
-                        <p className="text-neutral-400">Overview of your code review activity and metrics.</p>
-                    </div>
-                    <button
-                        onClick={fetchStats}
-                        className="flex items-center gap-2 px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-white rounded-lg transition-colors"
-                    >
-                        <RefreshCw size={16} />
-                        Refresh
-                    </button>
+        <div className="animate-fadeIn space-y-6">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-2xl md:text-3xl font-bold text-[var(--text-primary)] mb-1">Dashboard</h1>
+                    <p className="text-[var(--text-secondary)]">Overview of your code review activity</p>
                 </div>
-            </header>
+                <button onClick={handleRefresh} disabled={refreshing} className="btn btn-secondary">
+                    <RefreshCw size={18} className={refreshing ? 'animate-spin' : ''} />
+                    Refresh
+                </button>
+            </div>
 
             {error && (
-                <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400">
+                <div className="p-4 bg-[var(--accent-red)]/10 border border-[var(--accent-red)]/20 rounded-lg text-[var(--accent-red)]">
                     {error}
                 </div>
             )}
 
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                {/* Quality Score */}
-                <div className={`bg-gradient-to-br ${getScoreGradient(stats.avgQualityScore)} rounded-xl p-6 shadow-lg`}>
-                    <div className="flex items-center justify-between mb-4">
-                        <span className="text-white/80 font-medium">Avg Quality Score</span>
-                        <TrendingUp className="text-white/60" size={20} />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="stat-card p-5 hover:shadow-lg transition-shadow">
+                    <div className="flex items-center justify-between mb-3">
+                        <span className="text-[var(--text-muted)] text-sm">Total Reviews</span>
+                        <FileCode size={20} className="text-[var(--accent-blue)]" />
                     </div>
-                    <div className="text-4xl font-bold text-white">
-                        {stats.avgQualityScore || 0}
-                        <span className="text-lg text-white/60">/100</span>
+                    <p className="text-3xl font-bold text-[var(--text-primary)]">{stats.totalReviews}</p>
+                    <p className="text-xs text-[var(--text-muted)] mt-1">All time</p>
+                </div>
+
+                <div className="stat-card p-5 hover:shadow-lg transition-shadow">
+                    <div className="flex items-center justify-between mb-3">
+                        <span className="text-[var(--text-muted)] text-sm">Avg Quality</span>
+                        <Zap size={20} className={getScoreColor(stats.avgQualityScore)} />
+                    </div>
+                    <p className={`text-3xl font-bold ${getScoreColor(stats.avgQualityScore)}`}>
+                        {stats.avgQualityScore.toFixed(1)}%
+                    </p>
+                    <div className="mt-2 h-1.5 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
+                        <div
+                            className={`h-full bg-gradient-to-r ${getScoreGradient(stats.avgQualityScore)} transition-all duration-500`}
+                            style={{ width: `${stats.avgQualityScore}%` }}
+                        />
                     </div>
                 </div>
 
-                {/* Total Reviews */}
-                <div className="bg-[#1a1a1a] rounded-xl border border-neutral-800 p-6">
-                    <div className="flex items-center justify-between mb-4">
-                        <span className="text-neutral-400 font-medium">Total Reviews</span>
-                        <FileCode className="text-blue-500" size={20} />
+                <div className="stat-card p-5 hover:shadow-lg transition-shadow">
+                    <div className="flex items-center justify-between mb-3">
+                        <span className="text-[var(--text-muted)] text-sm">Issues Found</span>
+                        <Bug size={20} className="text-[var(--accent-orange)]" />
                     </div>
-                    <div className="text-4xl font-bold text-white">{stats.totalReviews || 0}</div>
-                    <div className="text-sm text-neutral-500 mt-1">{(stats.totalLinesOfCode || 0).toLocaleString()} lines analyzed</div>
-                </div>
-
-                {/* Issues Found */}
-                <div className="bg-[#1a1a1a] rounded-xl border border-neutral-800 p-6">
-                    <div className="flex items-center justify-between mb-4">
-                        <span className="text-neutral-400 font-medium">Issues Found</span>
-                        <AlertTriangle className="text-yellow-500" size={20} />
-                    </div>
-                    <div className="text-4xl font-bold text-white">{stats.totalIssues || 0}</div>
-                    <div className="flex items-center gap-3 mt-2">
-                        <span className="text-xs text-red-400">{stats.totalHigh || 0} high</span>
-                        <span className="text-xs text-yellow-400">{stats.totalMedium || 0} medium</span>
-                        <span className="text-xs text-blue-400">{stats.totalLow || 0} low</span>
+                    <p className="text-3xl font-bold text-[var(--text-primary)]">{stats.totalIssues}</p>
+                    <div className="flex gap-2 mt-1">
+                        <span className="text-xs text-red-500">{stats.totalHigh} high</span>
+                        <span className="text-xs text-yellow-500">{stats.totalMedium} med</span>
+                        <span className="text-xs text-blue-500">{stats.totalLow} low</span>
                     </div>
                 </div>
 
-                {/* Clean Code */}
-                <div className="bg-[#1a1a1a] rounded-xl border border-neutral-800 p-6">
-                    <div className="flex items-center justify-between mb-4">
-                        <span className="text-neutral-400 font-medium">Clean Reviews</span>
-                        <CheckCircle className="text-green-500" size={20} />
+                <div className="stat-card p-5 hover:shadow-lg transition-shadow">
+                    <div className="flex items-center justify-between mb-3">
+                        <span className="text-[var(--text-muted)] text-sm">Lines Reviewed</span>
+                        <Code2 size={20} className="text-[var(--accent-purple)]" />
                     </div>
-                    <div className="text-4xl font-bold text-white">
-                        {stats.totalReviews > 0
-                            ? Math.round((1 - stats.totalIssues / Math.max(1, stats.totalReviews * 10)) * 100)
-                            : 100}%
-                    </div>
-                    <div className="text-sm text-neutral-500 mt-1">Low issue rate</div>
+                    <p className="text-3xl font-bold text-[var(--text-primary)]">
+                        {stats.totalLinesOfCode.toLocaleString()}
+                    </p>
+                    <p className="text-xs text-[var(--text-muted)] mt-1">Total lines analyzed</p>
                 </div>
             </div>
 
             {/* Charts Row */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-                {/* Activity Trend */}
-                <div className="bg-[#1a1a1a] rounded-xl border border-neutral-800 p-6">
-                    <h3 className="text-lg font-semibold text-white mb-6">7-Day Activity</h3>
-                    {stats.trendData && stats.trendData.length > 0 ? (
-                        <div className="flex items-end justify-between h-32 gap-2">
-                            {stats.trendData.map((day, i) => (
-                                <div key={i} className="flex-1 flex flex-col items-center">
-                                    <div
-                                        className="w-full bg-blue-600 rounded-t transition-all"
-                                        style={{ height: `${Math.max(8, (day.reviews / Math.max(...stats.trendData.map(d => d.reviews), 1)) * 100)}%` }}
-                                    ></div>
-                                    <span className="text-xs text-neutral-500 mt-2">
-                                        {new Date(day.date).toLocaleDateString('en-US', { weekday: 'short' })}
-                                    </span>
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="h-32 flex items-center justify-center text-neutral-500">
-                            No activity data yet
-                        </div>
-                    )}
-                </div>
-
-                {/* Language Breakdown */}
-                <div className="bg-[#1a1a1a] rounded-xl border border-neutral-800 p-6">
-                    <h3 className="text-lg font-semibold text-white mb-6">Languages</h3>
-                    <div className="space-y-4">
-                        {stats.languageBreakdown && Object.keys(stats.languageBreakdown).length > 0 ? (
-                            Object.entries(stats.languageBreakdown).slice(0, 5).map(([lang, count]) => {
-                                const percentage = (count / Math.max(stats.totalReviews, 1)) * 100;
-                                const colors: Record<string, string> = {
-                                    javascript: 'bg-yellow-500',
-                                    typescript: 'bg-blue-500',
-                                    python: 'bg-green-500',
-                                    java: 'bg-orange-500',
-                                    go: 'bg-cyan-500',
-                                    rust: 'bg-orange-600',
-                                };
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Activity Chart */}
+                <div className="lg:col-span-2 card p-6">
+                    <h3 className="font-semibold text-[var(--text-primary)] mb-4 flex items-center gap-2">
+                        <TrendingUp size={18} className="text-[var(--accent-blue)]" />
+                        7-Day Activity
+                    </h3>
+                    <div className="h-48 flex items-end gap-2">
+                        {stats.trendData.length > 0 ? (
+                            stats.trendData.map((day, i) => {
+                                const maxReviews = Math.max(...stats.trendData.map(d => d.reviews), 1);
+                                const height = (day.reviews / maxReviews) * 100;
                                 return (
-                                    <div key={lang}>
-                                        <div className="flex items-center justify-between mb-1">
-                                            <span className="text-sm text-neutral-300 capitalize">{lang}</span>
-                                            <span className="text-sm text-neutral-500">{count} reviews</span>
-                                        </div>
-                                        <div className="w-full bg-neutral-800 rounded-full h-2">
-                                            <div
-                                                className={`h-2 rounded-full ${colors[lang.toLowerCase()] || 'bg-neutral-500'}`}
-                                                style={{ width: `${percentage}%` }}
-                                            ></div>
-                                        </div>
+                                    <div key={i} className="flex-1 flex flex-col items-center gap-2">
+                                        <div
+                                            className="w-full bg-gradient-to-t from-[var(--accent-blue)] to-[var(--accent-purple)] rounded-t-lg transition-all duration-500 hover:opacity-80"
+                                            style={{ height: `${Math.max(height, 5)}%` }}
+                                            title={`${day.reviews} reviews`}
+                                        />
+                                        <span className="text-xs text-[var(--text-muted)]">
+                                            {new Date(day.date).toLocaleDateString('en', { weekday: 'short' })}
+                                        </span>
                                     </div>
                                 );
                             })
                         ) : (
-                            <p className="text-neutral-500 text-center py-4">No language data yet</p>
+                            <div className="flex-1 flex items-center justify-center text-[var(--text-muted)]">
+                                No activity data yet
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Language Breakdown */}
+                <div className="card p-6">
+                    <h3 className="font-semibold text-[var(--text-primary)] mb-4 flex items-center gap-2">
+                        <BarChart3 size={18} className="text-[var(--accent-purple)]" />
+                        Languages
+                    </h3>
+                    <div className="space-y-3">
+                        {Object.entries(stats.languageBreakdown).length > 0 ? (
+                            Object.entries(stats.languageBreakdown)
+                                .sort((a, b) => b[1] - a[1])
+                                .slice(0, 5)
+                                .map(([lang, count]) => (
+                                    <div key={lang}>
+                                        <div className="flex items-center justify-between mb-1">
+                                            <span className="text-sm text-[var(--text-primary)] capitalize">{lang}</span>
+                                            <span className="text-xs text-[var(--text-muted)]">{count}</span>
+                                        </div>
+                                        <div className="h-2 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
+                                            <div
+                                                className={`h-full ${getLanguageColor(lang)} transition-all duration-500`}
+                                                style={{ width: `${(count / totalLanguages) * 100}%` }}
+                                            />
+                                        </div>
+                                    </div>
+                                ))
+                        ) : (
+                            <p className="text-[var(--text-muted)] text-sm text-center py-4">No language data yet</p>
                         )}
                     </div>
                 </div>
             </div>
 
-            {/* Quick Actions */}
-            <div className="bg-[#1a1a1a] rounded-xl border border-neutral-800 p-6">
-                <h3 className="text-lg font-semibold text-white mb-4">Quick Actions</h3>
-                <div className="flex flex-wrap gap-4">
-                    <button
-                        onClick={() => navigate('/')}
-                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
-                    >
-                        <Code2 size={18} />
-                        New Review
-                    </button>
-                    <button
-                        onClick={() => navigate('/history')}
-                        className="flex items-center gap-2 px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-white rounded-lg font-medium transition-colors"
-                    >
-                        <FileCode size={18} />
-                        View History
-                    </button>
+            {/* Severity Breakdown */}
+            <div className="card p-6">
+                <h3 className="font-semibold text-[var(--text-primary)] mb-4 flex items-center gap-2">
+                    <Shield size={18} className="text-[var(--accent-green)]" />
+                    Issues by Severity
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="p-4 bg-red-500/10 rounded-lg border border-red-500/20">
+                        <div className="flex items-center gap-2 mb-2">
+                            <AlertTriangle size={18} className="text-red-500" />
+                            <span className="text-sm font-medium text-[var(--text-primary)]">High Severity</span>
+                        </div>
+                        <p className="text-2xl font-bold text-red-500">{stats.totalHigh}</p>
+                        <p className="text-xs text-[var(--text-muted)] mt-1">
+                            {stats.totalIssues > 0 ? ((stats.totalHigh / stats.totalIssues) * 100).toFixed(0) : 0}% of total
+                        </p>
+                    </div>
+                    <div className="p-4 bg-yellow-500/10 rounded-lg border border-yellow-500/20">
+                        <div className="flex items-center gap-2 mb-2">
+                            <AlertTriangle size={18} className="text-yellow-500" />
+                            <span className="text-sm font-medium text-[var(--text-primary)]">Medium Severity</span>
+                        </div>
+                        <p className="text-2xl font-bold text-yellow-500">{stats.totalMedium}</p>
+                        <p className="text-xs text-[var(--text-muted)] mt-1">
+                            {stats.totalIssues > 0 ? ((stats.totalMedium / stats.totalIssues) * 100).toFixed(0) : 0}% of total
+                        </p>
+                    </div>
+                    <div className="p-4 bg-blue-500/10 rounded-lg border border-blue-500/20">
+                        <div className="flex items-center gap-2 mb-2">
+                            <CheckCircle size={18} className="text-blue-500" />
+                            <span className="text-sm font-medium text-[var(--text-primary)]">Low Severity</span>
+                        </div>
+                        <p className="text-2xl font-bold text-blue-500">{stats.totalLow}</p>
+                        <p className="text-xs text-[var(--text-muted)] mt-1">
+                            {stats.totalIssues > 0 ? ((stats.totalLow / stats.totalIssues) * 100).toFixed(0) : 0}% of total
+                        </p>
+                    </div>
                 </div>
+            </div>
+
+            {/* Quick Actions */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <button
+                    onClick={() => navigate('/')}
+                    className="card p-5 text-left hover:border-[var(--accent-blue)]/50 transition-colors group"
+                >
+                    <Code2 size={24} className="text-[var(--accent-blue)] mb-2" />
+                    <h4 className="font-medium text-[var(--text-primary)] group-hover:text-[var(--accent-blue)]">New Review</h4>
+                    <p className="text-sm text-[var(--text-muted)]">Start reviewing code</p>
+                </button>
+                <button
+                    onClick={() => navigate('/history')}
+                    className="card p-5 text-left hover:border-[var(--accent-purple)]/50 transition-colors group"
+                >
+                    <BookOpen size={24} className="text-[var(--accent-purple)] mb-2" />
+                    <h4 className="font-medium text-[var(--text-primary)] group-hover:text-[var(--accent-purple)]">View History</h4>
+                    <p className="text-sm text-[var(--text-muted)]">Browse past reviews</p>
+                </button>
+                <button
+                    onClick={() => navigate('/projects')}
+                    className="card p-5 text-left hover:border-[var(--accent-green)]/50 transition-colors group"
+                >
+                    <FileCode size={24} className="text-[var(--accent-green)] mb-2" />
+                    <h4 className="font-medium text-[var(--text-primary)] group-hover:text-[var(--accent-green)]">Projects</h4>
+                    <p className="text-sm text-[var(--text-muted)]">Manage your projects</p>
+                </button>
             </div>
         </div>
     );
-};
+}
