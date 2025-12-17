@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Sidebar } from './Sidebar';
 import { Bell, Search, User, Menu, Moon, Sun, Check } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
@@ -21,7 +21,7 @@ interface HeaderProps {
 
 export function Header({ onMenuClick }: HeaderProps) {
     const { theme, toggleTheme } = useTheme();
-    const { user, isAuthenticated } = useAuth();
+    const { user, isAuthenticated, logout } = useAuth();
     const navigate = useNavigate();
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [unreadCount, setUnreadCount] = useState(0);
@@ -265,7 +265,7 @@ export function Header({ onMenuClick }: HeaderProps) {
                                 </button>
                                 {isAuthenticated ? (
                                     <button
-                                        onClick={() => { localStorage.removeItem('token'); localStorage.removeItem('user'); window.location.reload(); }}
+                                        onClick={() => { logout(); navigate('/login'); setShowUserMenu(false); }}
                                         className="w-full text-left px-3 py-2 text-sm text-[var(--accent-red)] hover:bg-[var(--accent-red)]/10 rounded-lg transition-colors"
                                     >
                                         Sign Out
@@ -289,6 +289,19 @@ export function Header({ onMenuClick }: HeaderProps) {
 
 export function Layout({ children }: { children: React.ReactNode }) {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const { isLoading } = useAuth();
+
+    // Show loading spinner while checking auth
+    if (isLoading) {
+        return (
+            <div className="min-h-screen bg-[var(--bg-primary)] flex items-center justify-center">
+                <div className="text-center">
+                    <div className="animate-spin w-10 h-10 border-3 border-[var(--accent-blue)] border-t-transparent rounded-full mx-auto mb-4"></div>
+                    <p className="text-[var(--text-muted)]">Loading...</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-[var(--bg-primary)] text-[var(--text-primary)] font-sans transition-colors duration-300">
