@@ -180,3 +180,12 @@ model CustomRule {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
+
+model PasswordReset {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  email     String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Code2, Mail, Lock, User, Eye, EyeOff, ArrowRight, Loader2, AlertCircle, Github, Sparkles } from 'lucide-react';
 
@@ -180,9 +180,9 @@ export function LoginPage() {
 
                         {isLogin && (
                             <div className="flex justify-end">
-                                <button type="button" className="text-sm text-[var(--accent-blue)] hover:underline">
+                                <Link to="/forgot-password" className="text-sm text-[var(--accent-blue)] hover:underline">
                                     Forgot password?
-                                </button>
+                                </Link>
                             </div>
                         )}
 
