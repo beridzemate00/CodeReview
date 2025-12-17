@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { BookOpen, Plus, Search, Tag, Code2, Copy, Check, Trash2, Edit, Globe, Lock, X, Eye } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { BookOpen, Plus, Search, Code2, Copy, Check, Trash2, Edit, Globe, Lock, X, Eye } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Editor from '@monaco-editor/react';
@@ -19,7 +19,7 @@ interface Snippet {
 }
 
 export function SnippetsPage() {
-    const navigate = useNavigate();
+    useNavigate();
     const { isAuthenticated, user } = useAuth();
 
     const [snippets, setSnippets] = useState<Snippet[]>([]);

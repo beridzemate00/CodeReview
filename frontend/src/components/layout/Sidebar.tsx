@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, Code2, History, FolderOpen, Settings, LogOut, LogIn, Users, BookOpen, GitBranch, Bell } from 'lucide-react';
+import { LayoutDashboard, Code2, History, FolderOpen, Settings, LogOut, LogIn, Users, BookOpen, GitBranch } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 

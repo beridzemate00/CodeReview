@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { GitBranch, GitPullRequest, Link2, Unlink, ExternalLink, RefreshCw, Code2, FileCode, Play, Check, X, AlertCircle, Loader2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { GitBranch, GitPullRequest, Link2, Unlink, RefreshCw, Code2, FileCode, Play, X, AlertCircle, Loader2 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
@@ -43,7 +43,7 @@ interface PRFile {
 
 export function GitHubPage() {
     const navigate = useNavigate();
-    const { isAuthenticated, user } = useAuth();
+    const { isAuthenticated } = useAuth();
     const [searchParams] = useSearchParams();
 
     const [isConnected, setIsConnected] = useState(false);
@@ -470,13 +470,13 @@ export function GitHubPage() {
                             <div className="space-y-3">
                                 {reviewResult.reviews?.map((review: any, i: number) => (
                                     <div key={i} className={`p-3 rounded-lg border ${review.severity === 'high' ? 'border-red-500/30 bg-red-500/5' :
-                                            review.severity === 'medium' ? 'border-yellow-500/30 bg-yellow-500/5' :
-                                                'border-blue-500/30 bg-blue-500/5'
+                                        review.severity === 'medium' ? 'border-yellow-500/30 bg-yellow-500/5' :
+                                            'border-blue-500/30 bg-blue-500/5'
                                         }`}>
                                         <div className="flex items-center gap-2 mb-1">
                                             <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${review.severity === 'high' ? 'bg-red-500 text-white' :
-                                                    review.severity === 'medium' ? 'bg-yellow-500 text-black' :
-                                                        'bg-blue-500 text-white'
+                                                review.severity === 'medium' ? 'bg-yellow-500 text-black' :
+                                                    'bg-blue-500 text-white'
                                                 }`}>
                                                 {review.severity}
                                             </span>

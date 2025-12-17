@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { History, Search, Filter, Calendar, Code2, FileCode, Trash2, Eye, ChevronDown, BarChart3, X, Clock, Bug, AlertTriangle, CheckCircle } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { History, Search, Filter, Code2, FileCode, X, Clock, AlertTriangle } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 

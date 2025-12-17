@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Users, Plus, UserPlus, Settings, X, Crown, Shield, User, Trash2, Search, Mail } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Users, Plus, UserPlus, X, Crown, Shield, User, Trash2, Mail } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
@@ -29,7 +29,7 @@ interface Team {
 
 export function TeamsPage() {
     const navigate = useNavigate();
-    const { isAuthenticated, user } = useAuth();
+    const { isAuthenticated } = useAuth();
 
     const [teams, setTeams] = useState<Team[]>([]);
     const [loading, setLoading] = useState(true);
