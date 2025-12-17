@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import prisma from '../prisma/client';
+import { sendPasswordResetEmail, sendWelcomeEmail, isEmailConfigured } from '../services/emailService';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key-change-in-production';
 const JWT_EXPIRATION = '7d'; // 7 days
@@ -31,6 +32,10 @@ export const register = async (req: Request, res: Response) => {
         });
 
         console.log('User registered:', user.email);
+
+        // Send welcome email (async, don't wait)
+        sendWelcomeEmail(email, user.name || email.split('@')[0]).catch(console.error);
+
         const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: JWT_EXPIRATION });
         res.status(201).json({ token, user: { id: user.id, email: user.email, name: user.name } });
     } catch (error) {
@@ -68,7 +73,7 @@ export const login = async (req: Request, res: Response) => {
     }
 };
 
-// Request password reset - generates token and returns reset link
+// Request password reset - generates token and sends email
 export const forgotPassword = async (req: Request, res: Response) => {
     const { email } = req.body;
 
@@ -83,9 +88,7 @@ export const forgotPassword = async (req: Request, res: Response) => {
         if (!user) {
             console.log('Password reset requested for non-existent email:', email);
             return res.status(200).json({
-                message: 'If an account exists with this email, a reset link has been generated',
-                // For development, show that no user was found
-                devMessage: 'No user found with this email'
+                message: 'If an account exists with this email, a reset link has been sent'
             });
         }
 
@@ -108,19 +111,29 @@ export const forgotPassword = async (req: Request, res: Response) => {
             }
         });
 
-        // In production, you would send an email here
-        // For now, return the reset link directly
         const resetLink = `${FRONTEND_URL}/reset-password?token=${resetToken}`;
 
         console.log('Password reset requested for:', email);
-        console.log('Reset link:', resetLink);
 
-        res.status(200).json({
-            message: 'If an account exists with this email, a reset link has been generated',
-            // For development purposes, include the reset link
-            resetLink,
-            devMessage: 'In production, this link would be sent via email'
-        });
+        // Try to send email
+        const emailSent = await sendPasswordResetEmail(email, resetLink);
+
+        // Response based on email config
+        if (isEmailConfigured() && emailSent) {
+            res.status(200).json({
+                message: 'Password reset link has been sent to your email',
+                emailSent: true
+            });
+        } else {
+            // Development mode - show link directly
+            console.log('Reset link (email not configured):', resetLink);
+            res.status(200).json({
+                message: 'If an account exists with this email, a reset link has been generated',
+                resetLink, // Only show in dev when email not configured
+                emailSent: false,
+                devMessage: 'Email not configured. Configure SMTP_USER and SMTP_PASS in .env to send real emails.'
+            });
+        }
     } catch (error) {
         console.error('Forgot password failed:', error);
         res.status(500).json({ error: 'Failed to process password reset request' });
@@ -208,5 +221,37 @@ export const resetPassword = async (req: Request, res: Response) => {
     } catch (error) {
         console.error('Password reset failed:', error);
         res.status(500).json({ error: 'Failed to reset password' });
+    }
+};
+
+// Get current user info
+export const getCurrentUser = async (req: any, res: Response) => {
+    try {
+        const userId = req.user?.userId;
+        if (!userId) {
+            return res.status(401).json({ error: 'Not authenticated' });
+        }
+
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: {
+                id: true,
+                email: true,
+                name: true,
+                avatar: true,
+                role: true,
+                githubId: true,
+                createdAt: true
+            }
+        });
+
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        res.json({ user });
+    } catch (error) {
+        console.error('Get current user failed:', error);
+        res.status(500).json({ error: 'Failed to get user info' });
     }
 };
