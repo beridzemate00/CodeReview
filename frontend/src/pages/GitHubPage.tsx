@@ -61,13 +61,21 @@ export function GitHubPage() {
     useEffect(() => {
         // Check for OAuth callback
         const githubConnected = searchParams.get('github_connected');
-        if (githubConnected === 'true') {
-            setIsConnected(true);
+        const accessToken = searchParams.get('access_token');
+        const githubId = searchParams.get('github_id');
+        const githubError = searchParams.get('error');
+
+        if (githubError) {
+            setError('Failed to connect to GitHub: ' + githubError);
+            // Clear URL params
+            window.history.replaceState({}, '', '/github');
         }
 
-        const githubError = searchParams.get('error');
-        if (githubError) {
-            setError('Failed to connect to GitHub');
+        if (githubConnected === 'true' && accessToken && githubId) {
+            // Save the token to user account
+            saveGitHubToken(accessToken, githubId);
+            // Clear URL params
+            window.history.replaceState({}, '', '/github');
         }
 
         if (isAuthenticated) {
@@ -76,6 +84,32 @@ export function GitHubPage() {
             setLoading(false);
         }
     }, [isAuthenticated, searchParams]);
+
+    const saveGitHubToken = async (accessToken: string, githubId: string) => {
+        try {
+            const token = localStorage.getItem('token');
+            const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+            const response = await fetch(`${apiUrl}/api/github/connect`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ accessToken, githubId })
+            });
+
+            if (response.ok) {
+                setIsConnected(true);
+                checkConnection(); // Refresh repos
+            } else {
+                setError('Failed to save GitHub connection');
+            }
+        } catch (err) {
+            console.error('Failed to save GitHub token:', err);
+            setError('Failed to save GitHub connection');
+        }
+    };
+
 
     const checkConnection = async () => {
         try {

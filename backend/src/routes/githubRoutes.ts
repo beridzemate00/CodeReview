@@ -25,14 +25,16 @@ router.get('/auth-url', authenticateToken, (req: AuthRequest, res: Response): vo
 
 // OAuth callback
 router.get('/callback', async (req: Request, res: Response): Promise<void> => {
-    const { code } = req.query;
+    const { code, state } = req.query;
+    const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 
     if (!code) {
-        res.redirect('/github?error=github_auth_failed');
+        res.redirect(`${FRONTEND_URL}/github?error=github_auth_failed`);
         return;
     }
 
     try {
+        // Exchange code for access token
         const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
             method: 'POST',
             headers: {
@@ -50,9 +52,12 @@ router.get('/callback', async (req: Request, res: Response): Promise<void> => {
         const tokenData: any = await tokenResponse.json();
 
         if (tokenData.error) {
-            throw new Error(tokenData.error_description || 'Token exchange failed');
+            console.error('GitHub token error:', tokenData.error_description);
+            res.redirect(`${FRONTEND_URL}/github?error=token_exchange_failed`);
+            return;
         }
 
+        // Get GitHub user info
         const userResponse = await fetch('https://api.github.com/user', {
             headers: {
                 'Authorization': `Bearer ${tokenData.access_token}`,
@@ -61,10 +66,17 @@ router.get('/callback', async (req: Request, res: Response): Promise<void> => {
         });
 
         const githubUser: any = await userResponse.json();
-        res.redirect(`/github?github_connected=true&github_user=${githubUser.login}`);
+
+        // Store the token temporarily (in a real app, you'd associate this with the logged-in user)
+        // The frontend will call /connect to associate the token with the user
+        console.log('GitHub user authenticated:', githubUser.login);
+
+        // Redirect to frontend with success and token (token passed via URL for simplicity in dev)
+        // In production, use a more secure method (sessions, cookies, etc.)
+        res.redirect(`${FRONTEND_URL}/github?github_connected=true&github_user=${githubUser.login}&access_token=${tokenData.access_token}&github_id=${githubUser.id}`);
     } catch (error) {
         console.error('GitHub OAuth error:', error);
-        res.redirect('/github?error=github_auth_failed');
+        res.redirect(`${FRONTEND_URL}/github?error=github_auth_failed`);
     }
 });
 
