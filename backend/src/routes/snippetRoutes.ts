@@ -1,14 +1,18 @@
-import { Router } from 'express';
-import { authenticateToken, AuthRequest } from '../middleware/auth';
+import { Router, Request, Response, NextFunction } from 'express';
+import { authenticateToken, optionalAuth, AuthRequest } from '../middleware/auth';
 import prisma from '../prisma/client';
-import { Response } from 'express';
 
 const router = Router();
 
 // Get user's snippets
-router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.get('/', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const userId = req.user?.userId;
+        if (!userId) {
+            res.status(401).json({ error: 'Unauthorized' });
+            return;
+        }
+
         const { search, language, tags } = req.query;
 
         const where: any = { userId };
@@ -47,8 +51,8 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
     }
 });
 
-// Get public snippets (library)
-router.get('/public', async (req, res: Response) => {
+// Get public snippets (library) - no auth required
+router.get('/public', async (req: Request, res: Response): Promise<void> => {
     try {
         const { search, language, limit = '20' } = req.query;
 
@@ -82,7 +86,7 @@ router.get('/public', async (req, res: Response) => {
 });
 
 // Get single snippet
-router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.get('/:id', optionalAuth, async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const userId = req.user?.userId;
 
@@ -90,7 +94,7 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
             where: {
                 id: req.params.id,
                 OR: [
-                    { userId },
+                    { userId: userId || '' },
                     { isPublic: true }
                 ]
             },
@@ -100,7 +104,8 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
         });
 
         if (!snippet) {
-            return res.status(404).json({ error: 'Snippet not found' });
+            res.status(404).json({ error: 'Snippet not found' });
+            return;
         }
 
         res.json({ snippet });
@@ -111,15 +116,19 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
 });
 
 // Create snippet
-router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.post('/', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const userId = req.user?.userId;
-        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+        if (!userId) {
+            res.status(401).json({ error: 'Unauthorized' });
+            return;
+        }
 
         const { title, description, code, language, tags, isPublic } = req.body;
 
         if (!title || !code) {
-            return res.status(400).json({ error: 'Title and code are required' });
+            res.status(400).json({ error: 'Title and code are required' });
+            return;
         }
 
         const snippet = await prisma.codeSnippet.create({
@@ -142,9 +151,14 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
 });
 
 // Update snippet
-router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const userId = req.user?.userId;
+        if (!userId) {
+            res.status(401).json({ error: 'Unauthorized' });
+            return;
+        }
+
         const { title, description, code, language, tags, isPublic } = req.body;
 
         const existing = await prisma.codeSnippet.findFirst({
@@ -152,7 +166,8 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
         });
 
         if (!existing) {
-            return res.status(404).json({ error: 'Snippet not found' });
+            res.status(404).json({ error: 'Snippet not found' });
+            return;
         }
 
         const snippet = await prisma.codeSnippet.update({
@@ -175,16 +190,21 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
 });
 
 // Delete snippet
-router.delete('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.delete('/:id', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const userId = req.user?.userId;
+        if (!userId) {
+            res.status(401).json({ error: 'Unauthorized' });
+            return;
+        }
 
         const existing = await prisma.codeSnippet.findFirst({
             where: { id: req.params.id, userId }
         });
 
         if (!existing) {
-            return res.status(404).json({ error: 'Snippet not found' });
+            res.status(404).json({ error: 'Snippet not found' });
+            return;
         }
 
         await prisma.codeSnippet.delete({

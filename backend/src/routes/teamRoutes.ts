@@ -1,14 +1,17 @@
-import { Router } from 'express';
+import { Router, Response } from 'express';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import prisma from '../prisma/client';
-import { Response } from 'express';
 
 const router = Router();
 
 // Get user's teams
-router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.get('/', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const userId = req.user?.userId;
+        if (!userId) {
+            res.status(401).json({ error: 'Unauthorized' });
+            return;
+        }
 
         const memberships = await prisma.teamMember.findMany({
             where: { userId },
@@ -38,16 +41,64 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
     }
 });
 
-// Create team
-router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
+// Get single team
+router.get('/:teamId', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const userId = req.user?.userId;
-        if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+        if (!userId) {
+            res.status(401).json({ error: 'Unauthorized' });
+            return;
+        }
+
+        const { teamId } = req.params;
+
+        // Check if user is a member
+        const membership = await prisma.teamMember.findFirst({
+            where: { teamId, userId }
+        });
+
+        if (!membership) {
+            res.status(403).json({ error: 'Not a member of this team' });
+            return;
+        }
+
+        const team = await prisma.team.findUnique({
+            where: { id: teamId },
+            include: {
+                members: {
+                    include: { user: { select: { id: true, name: true, email: true, avatar: true } } }
+                },
+                projects: true,
+                _count: { select: { projects: true } }
+            }
+        });
+
+        if (!team) {
+            res.status(404).json({ error: 'Team not found' });
+            return;
+        }
+
+        res.json({ team, myRole: membership.role });
+    } catch (error) {
+        console.error('Failed to fetch team:', error);
+        res.status(500).json({ error: 'Failed to fetch team' });
+    }
+});
+
+// Create team
+router.post('/', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const userId = req.user?.userId;
+        if (!userId) {
+            res.status(401).json({ error: 'Unauthorized' });
+            return;
+        }
 
         const { name, description } = req.body;
 
         if (!name) {
-            return res.status(400).json({ error: 'Team name is required' });
+            res.status(400).json({ error: 'Team name is required' });
+            return;
         }
 
         const team = await prisma.team.create({
@@ -73,10 +124,49 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
     }
 });
 
-// Add member to team
-router.post('/:teamId/members', authenticateToken, async (req: AuthRequest, res: Response) => {
+// Get team members
+router.get('/:teamId/members', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const userId = req.user?.userId;
+        if (!userId) {
+            res.status(401).json({ error: 'Unauthorized' });
+            return;
+        }
+
+        const { teamId } = req.params;
+
+        // Check if user is a member
+        const membership = await prisma.teamMember.findFirst({
+            where: { teamId, userId }
+        });
+
+        if (!membership) {
+            res.status(403).json({ error: 'Not a member of this team' });
+            return;
+        }
+
+        const members = await prisma.teamMember.findMany({
+            where: { teamId },
+            include: { user: { select: { id: true, name: true, email: true, avatar: true } } },
+            orderBy: { createdAt: 'asc' }
+        });
+
+        res.json({ members });
+    } catch (error) {
+        console.error('Failed to fetch team members:', error);
+        res.status(500).json({ error: 'Failed to fetch team members' });
+    }
+});
+
+// Add member to team
+router.post('/:teamId/members', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const userId = req.user?.userId;
+        if (!userId) {
+            res.status(401).json({ error: 'Unauthorized' });
+            return;
+        }
+
         const { teamId } = req.params;
         const { email, role = 'member' } = req.body;
 
@@ -86,13 +176,15 @@ router.post('/:teamId/members', authenticateToken, async (req: AuthRequest, res:
         });
 
         if (!membership) {
-            return res.status(403).json({ error: 'No permission to add members' });
+            res.status(403).json({ error: 'No permission to add members' });
+            return;
         }
 
         // Find user by email
         const userToAdd = await prisma.user.findUnique({ where: { email } });
         if (!userToAdd) {
-            return res.status(404).json({ error: 'User not found' });
+            res.status(404).json({ error: 'User not found with this email' });
+            return;
         }
 
         // Check if already a member
@@ -101,7 +193,8 @@ router.post('/:teamId/members', authenticateToken, async (req: AuthRequest, res:
         });
 
         if (existing) {
-            return res.status(400).json({ error: 'User is already a member' });
+            res.status(400).json({ error: 'User is already a member of this team' });
+            return;
         }
 
         const newMember = await prisma.teamMember.create({
@@ -114,13 +207,14 @@ router.post('/:teamId/members', authenticateToken, async (req: AuthRequest, res:
         });
 
         // Create notification for the invited user
+        const team = await prisma.team.findUnique({ where: { id: teamId } });
         await prisma.notification.create({
             data: {
                 userId: userToAdd.id,
                 type: 'team_invite',
                 title: 'Team Invitation',
-                message: `You have been added to team "${(await prisma.team.findUnique({ where: { id: teamId } }))?.name}"`,
-                link: `/teams/${teamId}`
+                message: `You have been added to team "${team?.name || 'Unknown'}"`,
+                link: `/teams`
             }
         });
 
@@ -132,9 +226,14 @@ router.post('/:teamId/members', authenticateToken, async (req: AuthRequest, res:
 });
 
 // Remove member from team
-router.delete('/:teamId/members/:memberId', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.delete('/:teamId/members/:memberId', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const userId = req.user?.userId;
+        if (!userId) {
+            res.status(401).json({ error: 'Unauthorized' });
+            return;
+        }
+
         const { teamId, memberId } = req.params;
 
         // Check if requester has permission
@@ -143,7 +242,24 @@ router.delete('/:teamId/members/:memberId', authenticateToken, async (req: AuthR
         });
 
         if (!membership) {
-            return res.status(403).json({ error: 'No permission to remove members' });
+            res.status(403).json({ error: 'No permission to remove members' });
+            return;
+        }
+
+        // Check if member exists
+        const memberToRemove = await prisma.teamMember.findUnique({
+            where: { id: memberId }
+        });
+
+        if (!memberToRemove || memberToRemove.teamId !== teamId) {
+            res.status(404).json({ error: 'Member not found' });
+            return;
+        }
+
+        // Prevent removing owner
+        if (memberToRemove.role === 'owner') {
+            res.status(400).json({ error: 'Cannot remove team owner' });
+            return;
         }
 
         await prisma.teamMember.delete({
@@ -157,10 +273,50 @@ router.delete('/:teamId/members/:memberId', authenticateToken, async (req: AuthR
     }
 });
 
-// Update team
-router.put('/:teamId', authenticateToken, async (req: AuthRequest, res: Response) => {
+// Update member role
+router.put('/:teamId/members/:memberId', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const userId = req.user?.userId;
+        if (!userId) {
+            res.status(401).json({ error: 'Unauthorized' });
+            return;
+        }
+
+        const { teamId, memberId } = req.params;
+        const { role } = req.body;
+
+        // Check if requester is owner
+        const membership = await prisma.teamMember.findFirst({
+            where: { teamId, userId, role: 'owner' }
+        });
+
+        if (!membership) {
+            res.status(403).json({ error: 'Only owner can change roles' });
+            return;
+        }
+
+        const updatedMember = await prisma.teamMember.update({
+            where: { id: memberId },
+            data: { role },
+            include: { user: { select: { id: true, name: true, email: true, avatar: true } } }
+        });
+
+        res.json({ member: updatedMember });
+    } catch (error) {
+        console.error('Failed to update member:', error);
+        res.status(500).json({ error: 'Failed to update member' });
+    }
+});
+
+// Update team
+router.put('/:teamId', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const userId = req.user?.userId;
+        if (!userId) {
+            res.status(401).json({ error: 'Unauthorized' });
+            return;
+        }
+
         const { teamId } = req.params;
         const { name, description } = req.body;
 
@@ -170,7 +326,8 @@ router.put('/:teamId', authenticateToken, async (req: AuthRequest, res: Response
         });
 
         if (!membership) {
-            return res.status(403).json({ error: 'No permission to update team' });
+            res.status(403).json({ error: 'No permission to update team' });
+            return;
         }
 
         const team = await prisma.team.update({
@@ -186,9 +343,14 @@ router.put('/:teamId', authenticateToken, async (req: AuthRequest, res: Response
 });
 
 // Delete team
-router.delete('/:teamId', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.delete('/:teamId', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const userId = req.user?.userId;
+        if (!userId) {
+            res.status(401).json({ error: 'Unauthorized' });
+            return;
+        }
+
         const { teamId } = req.params;
 
         // Check if requester is owner
@@ -197,8 +359,14 @@ router.delete('/:teamId', authenticateToken, async (req: AuthRequest, res: Respo
         });
 
         if (!membership) {
-            return res.status(403).json({ error: 'Only owner can delete team' });
+            res.status(403).json({ error: 'Only owner can delete team' });
+            return;
         }
+
+        // Delete all members first (due to foreign key constraints)
+        await prisma.teamMember.deleteMany({
+            where: { teamId }
+        });
 
         await prisma.team.delete({
             where: { id: teamId }
