@@ -66,10 +66,10 @@ export const rateLimiters = {
         message: 'Too many requests. Please wait a moment.'
     }),
 
-    // Auth endpoints: 10 requests per minute (prevent brute force)
+    // Auth endpoints: 30 requests per minute (prevent brute force but allow normal usage)
     auth: createRateLimiter({
         windowMs: 60000,
-        maxRequests: 10,
+        maxRequests: 30,
         message: 'Too many authentication attempts. Please try again in a minute.'
     }),
 
