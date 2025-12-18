@@ -85,6 +85,7 @@ export const createReview = async (req: AuthRequest, res: Response) => {
                 data: {
                     content: JSON.stringify(uniqueReviews),
                     codeSnippet: code.substring(0, 500),
+                    fullCode: code,
                     language: language || 'typescript',
                     fileName: fileName || 'untitled',
                     linesOfCode: stats.linesOfCode,
@@ -93,6 +94,11 @@ export const createReview = async (req: AuthRequest, res: Response) => {
                     mediumSeverity: stats.mediumSeverity,
                     lowSeverity: stats.lowSeverity,
                     qualityScore: stats.qualityScore,
+                    readabilityScore: stats.readabilityScore,
+                    maintainabilityScore: stats.maintainabilityScore,
+                    securityScore: stats.securityScore,
+                    performanceScore: stats.performanceScore,
+                    predictedBugRisk: stats.predictedBugRisk,
                     complexity: stats.complexity,
                     projectId: projectId || undefined,
                     userId: userId,
@@ -148,10 +154,17 @@ export const getStats = async (req: AuthRequest, res: Response) => {
     }
 
     try {
+        // Get all reviews with more fields
         const reviews = await prisma.review.findMany({
             where: { userId },
             select: {
+                id: true,
+                fileName: true,
                 qualityScore: true,
+                readabilityScore: true,
+                maintainabilityScore: true,
+                securityScore: true,
+                performanceScore: true,
                 issueCount: true,
                 highSeverity: true,
                 mediumSeverity: true,
@@ -160,6 +173,7 @@ export const getStats = async (req: AuthRequest, res: Response) => {
                 createdAt: true,
                 language: true,
             },
+            orderBy: { createdAt: 'desc' },
         });
 
         const totalReviews = reviews.length;
@@ -168,15 +182,32 @@ export const getStats = async (req: AuthRequest, res: Response) => {
         const totalMedium = reviews.reduce((sum: number, r: any) => sum + r.mediumSeverity, 0);
         const totalLow = reviews.reduce((sum: number, r: any) => sum + r.lowSeverity, 0);
         const totalLinesOfCode = reviews.reduce((sum: number, r: any) => sum + r.linesOfCode, 0);
+
         const avgQualityScore = totalReviews > 0
             ? reviews.reduce((sum: number, r: any) => sum + r.qualityScore, 0) / totalReviews
             : 0;
 
+        // Calculate average ML scores
+        const avgReadability = totalReviews > 0
+            ? reviews.reduce((sum: number, r: any) => sum + (r.readabilityScore || 0), 0) / totalReviews
+            : 0;
+        const avgMaintainability = totalReviews > 0
+            ? reviews.reduce((sum: number, r: any) => sum + (r.maintainabilityScore || 0), 0) / totalReviews
+            : 0;
+        const avgSecurity = totalReviews > 0
+            ? reviews.reduce((sum: number, r: any) => sum + (r.securityScore || 0), 0) / totalReviews
+            : 0;
+        const avgPerformance = totalReviews > 0
+            ? reviews.reduce((sum: number, r: any) => sum + (r.performanceScore || 0), 0) / totalReviews
+            : 0;
+
+        // Language breakdown
         const languageBreakdown: Record<string, number> = {};
         reviews.forEach((r: any) => {
             languageBreakdown[r.language] = (languageBreakdown[r.language] || 0) + 1;
         });
 
+        // 7-day trend data
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
         const recentReviews = reviews.filter((r: any) => new Date(r.createdAt) >= sevenDaysAgo);
@@ -195,10 +226,39 @@ export const getStats = async (req: AuthRequest, res: Response) => {
                 avgScore: dayReviews.length > 0
                     ? dayReviews.reduce((sum: number, r: any) => sum + r.qualityScore, 0) / dayReviews.length
                     : 0,
+                issues: dayReviews.reduce((sum: number, r: any) => sum + r.issueCount, 0),
             });
         }
 
+        // Recent reviews (last 5)
+        const recentReviewsList = reviews.slice(0, 5).map((r: any) => ({
+            id: r.id,
+            fileName: r.fileName,
+            language: r.language,
+            qualityScore: r.qualityScore,
+            issueCount: r.issueCount,
+            createdAt: r.createdAt,
+        }));
+
+        // Improvement score (compare last 7 days to previous 7 days)
+        const fourteenDaysAgo = new Date();
+        fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
+        const previousWeek = reviews.filter((r: any) => {
+            const date = new Date(r.createdAt);
+            return date >= fourteenDaysAgo && date < sevenDaysAgo;
+        });
+        const currentWeekAvg = recentReviews.length > 0
+            ? recentReviews.reduce((sum: number, r: any) => sum + r.qualityScore, 0) / recentReviews.length
+            : 0;
+        const previousWeekAvg = previousWeek.length > 0
+            ? previousWeek.reduce((sum: number, r: any) => sum + r.qualityScore, 0) / previousWeek.length
+            : 0;
+        const improvementScore = previousWeekAvg > 0
+            ? ((currentWeekAvg - previousWeekAvg) / previousWeekAvg) * 100
+            : 0;
+
         res.json({
+            // Basic stats
             totalReviews,
             totalIssues,
             totalHigh,
@@ -206,11 +266,31 @@ export const getStats = async (req: AuthRequest, res: Response) => {
             totalLow,
             totalLinesOfCode,
             avgQualityScore: Math.round(avgQualityScore * 10) / 10,
+
+            // ML/AI average scores
+            avgScores: {
+                quality: Math.round(avgQualityScore * 10) / 10,
+                readability: Math.round(avgReadability * 10) / 10,
+                maintainability: Math.round(avgMaintainability * 10) / 10,
+                security: Math.round(avgSecurity * 10) / 10,
+                performance: Math.round(avgPerformance * 10) / 10,
+            },
+
+            // Breakdowns
             languageBreakdown,
             trendData,
+
+            // Recent activity
+            recentReviews: recentReviewsList,
+
+            // Improvement tracking
+            improvementScore: Math.round(improvementScore * 10) / 10,
+            thisWeekReviews: recentReviews.length,
+            lastWeekReviews: previousWeek.length,
         });
     } catch (error) {
         console.error('Failed to fetch stats:', error);
         res.status(500).json({ error: 'Failed to fetch stats' });
     }
 };
+
