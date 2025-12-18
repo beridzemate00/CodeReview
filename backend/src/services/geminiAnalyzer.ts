@@ -1,10 +1,12 @@
 import { GoogleGenAI } from '@google/genai';
 import { v4 as uuidv4 } from 'uuid';
 import { ReviewComment } from './analyzer';
+import { aiCache } from './cacheService';
 
 /**
  * Gemini AI-Powered Code Review Service
  * Uses Google's Gemini 2.5 Flash for intelligent code analysis
+ * Now with caching support to reduce API calls
  */
 
 interface GeminiReviewResult {
@@ -35,9 +37,19 @@ export class GeminiAnalyzer {
         return this.ai !== null && !!process.env.GEMINI_API_KEY;
     }
 
-    async analyze(code: string, language: string): Promise<GeminiReviewResult> {
+    async analyze(code: string, language: string, skipCache = false): Promise<GeminiReviewResult> {
         if (!this.ai) {
             throw new Error('Gemini API key not configured');
+        }
+
+        // Check cache first (unless skipping)
+        const cacheKey = aiCache.generateKey(code, language);
+        if (!skipCache) {
+            const cachedResult = aiCache.get<GeminiReviewResult>(cacheKey);
+            if (cachedResult) {
+                console.log('🎯 Cache hit for Gemini analysis');
+                return cachedResult;
+            }
         }
 
         const prompt = this.buildPrompt(code, language);
@@ -49,7 +61,13 @@ export class GeminiAnalyzer {
             });
 
             const text = response.text || '';
-            return this.parseResponse(text, code);
+            const result = this.parseResponse(text, code);
+
+            // Cache the result (2 hours TTL)
+            aiCache.set(cacheKey, result, 7200);
+            console.log('💾 Cached Gemini analysis result');
+
+            return result;
         } catch (error) {
             console.error('Gemini API error:', error);
             throw new Error('Failed to analyze code with Gemini AI');
