@@ -128,7 +128,7 @@ code-review-assistant/
 - **Runtime**: Node.js 20
 - **Framework**: Express.js
 - **Language**: TypeScript
-- **Database**: SQLite (Prisma ORM)
+- **Database**: PostgreSQL (Prisma ORM + Accelerate)
 - **Authentication**: JWT
 - **AI**: Google Gemini API
 
@@ -158,10 +158,11 @@ code-review-assistant/
 
 | Variable | Description | Required |
 |----------|-------------|----------|
-| `DATABASE_URL` | SQLite database path | Yes |
+| `DATABASE_URL` | PostgreSQL connection string (Prisma Accelerate) | Yes |
 | `JWT_SECRET` | JWT signing secret | Yes |
 | `PORT` | Server port (default: 3000) | No |
 | `GEMINI_API_KEY` | Google Gemini API key | No |
+| `POSTGRES_PASSWORD` | PostgreSQL password (Docker only) | Docker only |
 
 ## 🤝 Contributing
 
